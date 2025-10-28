@@ -6,6 +6,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 
 // Load environment variables
+// Updated for production deployment - October 28, 2025
 dotenv.config();
 
 // Import routes
