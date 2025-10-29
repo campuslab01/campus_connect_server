@@ -9,6 +9,13 @@ const path = require('path');
 // Updated for production deployment - October 28, 2025
 dotenv.config();
 
+// Debug environment variables
+console.log('🔍 Environment Variables Debug:');
+console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
+console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
+console.log('CLIENT_URL:', process.env.CLIENT_URL || 'NOT SET');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
+
 // Import routes
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
