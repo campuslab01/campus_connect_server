@@ -23,6 +23,7 @@ const validateRegistration = [
     .withMessage('Age must be between 18 and 30'),
   
   body('gender')
+    .customSanitizer(v => (typeof v === 'string' ? v.toLowerCase() : v))
     .isIn(['male', 'female', 'other'])
     .withMessage('Gender must be male, female, or other'),
   
@@ -80,8 +81,8 @@ const validateRegistration = [
     .withMessage('At least one profile photo is required'),
   
   body('photos.*')
-    .isURL()
-    .withMessage('Each photo must be a valid URL')
+    .custom(v => typeof v === 'string' && (v.startsWith('http') || v.startsWith('data:image/')))
+    .withMessage('Each photo must be a valid URL or data image')
 ];
 
 // User login validation
