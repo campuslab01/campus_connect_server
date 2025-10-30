@@ -64,11 +64,23 @@ const userSchema = new mongoose.Schema({
   },
   photos: [{
     type: String, // URLs to uploaded images
-    required: true
+    required: [true, 'At least one profile photo is required'],
+    validate: {
+      validator: function(photos) {
+        return photos && photos.length > 0;
+      },
+      message: 'At least one profile photo is required'
+    }
   }],
   profileImage: {
     type: String, // Main profile image URL
-    default: ''
+    required: [true, 'Profile image is required'],
+    validate: {
+      validator: function(v) {
+        return v && v.length > 0;
+      },
+      message: 'Profile image is required'
+    }
   },
   
   // Relationship Information
@@ -153,7 +165,6 @@ const userSchema = new mongoose.Schema({
 });
 
 // Indexes for better performance
-userSchema.index({ email: 1 });
 userSchema.index({ college: 1 });
 userSchema.index({ department: 1 });
 userSchema.index({ interests: 1 });
@@ -170,7 +181,7 @@ userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   
   try {
-    // Hash password with cost of 12
+    // Hash password with cost of 12 (increased from default 10 for better security)
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
     next();

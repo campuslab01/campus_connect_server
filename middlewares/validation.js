@@ -69,7 +69,19 @@ const validateRegistration = [
   body('relationshipStatus')
     .optional()
     .isIn(['Single', 'In a relationship', 'Married', 'It\'s complicated'])
-    .withMessage('Invalid relationship status')
+    .withMessage('Invalid relationship status'),
+  
+  body('profileImage')
+    .notEmpty()
+    .withMessage('Profile image is required'),
+  
+  body('photos')
+    .isArray({ min: 1 })
+    .withMessage('At least one profile photo is required'),
+  
+  body('photos.*')
+    .isURL()
+    .withMessage('Each photo must be a valid URL')
 ];
 
 // User login validation
