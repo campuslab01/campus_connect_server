@@ -63,24 +63,11 @@ const userSchema = new mongoose.Schema({
     default: ''
   },
   photos: [{
-    type: String, // URLs to uploaded images
-    required: [true, 'At least one profile photo is required'],
-    validate: {
-      validator: function(photos) {
-        return photos && photos.length > 0;
-      },
-      message: 'At least one profile photo is required'
-    }
+    type: String // URLs or data URIs
   }],
   profileImage: {
-    type: String, // Main profile image URL
-    required: [true, 'Profile image is required'],
-    validate: {
-      validator: function(v) {
-        return v && v.length > 0;
-      },
-      message: 'Profile image is required'
-    }
+    type: String, // Main profile image URL or data URI
+    default: ''
   },
   
   // Relationship Information

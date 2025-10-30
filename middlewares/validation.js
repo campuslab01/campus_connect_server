@@ -73,14 +73,17 @@ const validateRegistration = [
     .withMessage('Invalid relationship status'),
   
   body('profileImage')
-    .notEmpty()
-    .withMessage('Profile image is required'),
+    .optional()
+    .isString()
+    .withMessage('Profile image must be a string'),
   
   body('photos')
-    .isArray({ min: 1 })
-    .withMessage('At least one profile photo is required'),
+    .optional()
+    .isArray()
+    .withMessage('Photos must be an array'),
   
   body('photos.*')
+    .optional()
     .custom(v => typeof v === 'string' && (v.startsWith('http') || v.startsWith('data:image/')))
     .withMessage('Each photo must be a valid URL or data image')
 ];
