@@ -92,25 +92,7 @@ const login = async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'Email and password are required' });
     }
 
-    // TEMP DEV USER
-    if (email === "dev@campus.com" && password === "campusconnect") {
-      const devUser = {
-        _id: "dev001",
-        name: "Developer",
-        email: "dev@campus.com",
-        gender: "male",
-        college: "Campus College",
-        department: "Computer Science",
-        year: "4",
-      };
-
-      const token = generateToken(devUser._id);
-      return res.status(200).json({
-        status: "success",
-        message: "Dev login successful",
-        data: { user: devUser, token },
-      });
-    }
+    // Removed temporary hardcoded dev user bypass; all logins go through DB
 
     // Validation errors
     const errors = validationResult(req);
