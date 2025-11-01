@@ -15,12 +15,12 @@ const uploadProfileImage = async (req, res, next) => {
 
     let imageUrl;
 
-    // Upload to S3 if configured, otherwise use local path
+    // Upload to S3 if configured, otherwise use absolute local URL
     if (process.env.AWS_S3_BUCKET) {
       imageUrl = await uploadToS3(req.file, 'profiles');
     } else {
-      // Local development - use relative path
-      imageUrl = `/uploads/${req.file.filename}`;
+      const origin = process.env.SERVER_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+      imageUrl = `${origin}/uploads/${req.file.filename}`;
     }
 
     // Update user's profile image
@@ -64,15 +64,27 @@ const uploadImages = async (req, res, next) => {
       if (process.env.AWS_S3_BUCKET) {
         imageUrl = await uploadToS3(file, 'profiles');
       } else {
-        imageUrl = `/uploads/${file.filename}`;
+        const origin = process.env.SERVER_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+        imageUrl = `${origin}/uploads/${file.filename}`;
       }
       
       imageUrls.push(imageUrl);
     }
 
-    // Update user's photos array
+    // Update user's photos array with a maximum of 3 images
     const user = await User.findById(req.user._id);
-    user.photos = [...user.photos, ...imageUrls];
+    const currentCount = Array.isArray(user.photos) ? user.photos.length : 0;
+    const availableSlots = Math.max(0, 3 - currentCount);
+    const toAdd = imageUrls.slice(0, availableSlots);
+
+    if (toAdd.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Maximum of 3 images allowed. Delete or replace an existing image.'
+      });
+    }
+
+    user.photos = [...(user.photos || []), ...toAdd];
     
     // Set first photo as profile image if none exists
     if (!user.profileImage && imageUrls.length > 0) {
@@ -85,7 +97,7 @@ const uploadImages = async (req, res, next) => {
       status: 'success',
       message: 'Images uploaded successfully',
       data: {
-        imageUrls,
+        imageUrls: toAdd,
         user: user.getPublicProfile()
       }
     });
@@ -138,6 +150,65 @@ const deleteImage = async (req, res, next) => {
   }
 };
 
+// @desc    Replace an image at specified index (0-2)
+// @route   PUT /api/upload/images/:index
+// @access  Private
+const replaceImageAtIndex = async (req, res, next) => {
+  try {
+    const index = parseInt(req.params.index, 10);
+    if (Number.isNaN(index) || index < 0 || index > 2) {
+      return res.status(400).json({ status: 'error', message: 'Index must be 0, 1, or 2' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ status: 'error', message: 'No image file provided' });
+    }
+
+    const user = await User.findById(req.user._id);
+    const photos = Array.isArray(user.photos) ? user.photos : [];
+
+    // Construct new image URL
+    let newUrl;
+    if (process.env.AWS_S3_BUCKET) {
+      newUrl = await uploadToS3(req.file, 'profiles');
+    } else {
+      const origin = process.env.SERVER_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+      newUrl = `${origin}/uploads/${req.file.filename}`;
+    }
+
+    // If slot doesn't exist yet but below cap, expand to that slot if possible
+    if (index >= photos.length) {
+      if (photos.length >= 3) {
+        return res.status(400).json({ status: 'error', message: 'Maximum of 3 images allowed' });
+      }
+      // Fill missing slots with the new image only at the specific index using placeholders
+      while (photos.length < index) photos.push(photos[photos.length - 1] || newUrl);
+      photos.push(newUrl);
+    } else {
+      // Replace existing
+      const oldUrl = photos[index];
+      photos[index] = newUrl;
+      if (process.env.AWS_S3_BUCKET && oldUrl && oldUrl.includes('amazonaws.com')) {
+        await deleteFromS3(oldUrl);
+      }
+      // If replaced main profile image
+      if (user.profileImage === oldUrl) {
+        user.profileImage = newUrl;
+      }
+    }
+
+    user.photos = photos.slice(0, 3);
+    await user.save();
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Image updated successfully',
+      data: { user: user.getPublicProfile() }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Set profile image
 // @route   PUT /api/upload/profile-image
 // @access  Private
@@ -184,11 +255,12 @@ const uploadChatImage = async (req, res, next) => {
 
     let imageUrl;
 
-    // Upload to S3 if configured, otherwise use local path
+    // Upload to S3 if configured, otherwise use absolute local URL
     if (process.env.AWS_S3_BUCKET) {
       imageUrl = await uploadToS3(req.file, 'chat');
     } else {
-      imageUrl = `/uploads/${req.file.filename}`;
+      const origin = process.env.SERVER_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+      imageUrl = `${origin}/uploads/${req.file.filename}`;
     }
 
     res.status(200).json({
@@ -208,5 +280,6 @@ module.exports = {
   uploadImages,
   deleteImage,
   setProfileImage,
-  uploadChatImage
+  uploadChatImage,
+  replaceImageAtIndex
 };

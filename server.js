@@ -148,6 +148,9 @@ app.use(errorHandler);
 // Import database connection
 const connectDB = require('./config/database');
 
+// Import Socket.io initialization
+const { initializeSocket } = require('./utils/socket');
+
 // Start server
 const PORT = process.env.PORT || 5000;
 
@@ -155,12 +158,17 @@ const startServer = async () => {
   try {
     await connectDB();
     
-    app.listen(PORT, () => {
+    const httpServer = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🌐 API URL: http://localhost:${PORT}/api`);
       console.log(`💚 Health check: http://localhost:${PORT}/api/health`);
     });
+
+    // Initialize Socket.io
+    initializeSocket(httpServer);
+    console.log(`🔌 Socket.io initialized`);
+    
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
     process.exit(1);

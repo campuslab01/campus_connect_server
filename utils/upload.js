@@ -72,7 +72,7 @@ const upload = multer({
   storage: storage,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
-    files: 5 // Maximum 5 files
+    files: 3 // Maximum 3 files overall per request
   },
   fileFilter: fileFilter
 });
@@ -134,7 +134,7 @@ const deleteFromS3 = async (url) => {
 const uploadSingle = upload.single('image');
 
 // Middleware for multiple images upload
-const uploadMultiple = upload.array('images', 5);
+const uploadMultiple = upload.array('images', 3);
 
 // Middleware for profile image upload
 const uploadProfileImage = upload.single('profileImage');

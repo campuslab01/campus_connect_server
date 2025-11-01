@@ -4,7 +4,8 @@ const {
   uploadImages,
   deleteImage,
   setProfileImage,
-  uploadChatImage
+  uploadChatImage,
+  replaceImageAtIndex
 } = require('../controllers/uploadController');
 const {
   uploadSingle,
@@ -39,5 +40,10 @@ router.delete('/images/:imageUrl', deleteImage);
 // @desc    Set a specific image as profile image
 // @access  Private
 router.put('/profile-image', setProfileImage);
+
+// @route   PUT /api/upload/images/:index
+// @desc    Replace an existing image by index 0-2
+// @access  Private
+router.put('/images/:index', uploadSingle, handleUploadError, replaceImageAtIndex);
 
 module.exports = router;
