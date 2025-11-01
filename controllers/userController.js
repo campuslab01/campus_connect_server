@@ -221,6 +221,72 @@ const likeUser = async (req, res, next) => {
     await currentUser.save();
     await targetUser.save();
 
+    // Send Socket.io notification for real-time updates
+    const { getIO } = require('../utils/socket');
+    const io = getIO();
+    
+    // Notify target user about the like (if online)
+    io.to(`user:${targetUserId}`).emit('like:new', {
+      userId: currentUserId.toString(),
+      username: currentUser.name,
+      userAvatar: currentUser.profileImage
+    });
+
+    // Send FCM push notification for like
+    if (!isMatch) {
+      try {
+        const { sendLikeNotification } = require('../utils/pushNotification');
+        await sendLikeNotification(targetUserId, {
+          userId: currentUserId.toString(),
+          userName: currentUser.name,
+          userAvatar: currentUser.profileImage
+        });
+      } catch (notificationError) {
+        console.error('Error sending like notification:', notificationError);
+      }
+    }
+
+    // If it's a match, notify both users
+    if (isMatch) {
+      // Socket.io notifications for matches
+      io.to(`user:${currentUserId}`).emit('match:new', {
+        userId: targetUserId.toString(),
+        userName: targetUser.name,
+        userAvatar: targetUser.profileImage,
+        matchId: `${currentUserId}-${targetUserId}`
+      });
+      
+      io.to(`user:${targetUserId}`).emit('match:new', {
+        userId: currentUserId.toString(),
+        userName: currentUser.name,
+        userAvatar: currentUser.profileImage,
+        matchId: `${currentUserId}-${targetUserId}`
+      });
+
+      // FCM push notifications for matches
+      try {
+        const { sendMatchNotification } = require('../utils/pushNotification');
+        
+        // Notify current user about match
+        await sendMatchNotification(currentUserId.toString(), {
+          userId: targetUserId.toString(),
+          userName: targetUser.name,
+          userAvatar: targetUser.profileImage,
+          matchId: `${currentUserId}-${targetUserId}`
+        });
+        
+        // Notify target user about match
+        await sendMatchNotification(targetUserId, {
+          userId: currentUserId.toString(),
+          userName: currentUser.name,
+          userAvatar: currentUser.profileImage,
+          matchId: `${currentUserId}-${targetUserId}`
+        });
+      } catch (notificationError) {
+        console.error('Error sending match notification:', notificationError);
+      }
+    }
+
     res.status(200).json({
       status: 'success',
       message: isMatch ? 'It\'s a match!' : 'User liked successfully',
