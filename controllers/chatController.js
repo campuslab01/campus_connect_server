@@ -214,56 +214,72 @@ const sendMessage = async (req, res, next) => {
     // Get the last message (the one we just added) with populated sender
     const populatedMessage = chat.messages[chat.messages.length - 1];
 
+    // Emit Socket.io event for real-time updates (for connected users)
+    try {
+      const { getIO } = require('../utils/socket');
+      const io = getIO();
+      io.to(`chat:${chatId}`).emit('message:new', {
+        id: populatedMessage._id,
+        chatId: chatId,
+        content: populatedMessage.content,
+        sender: {
+          id: req.user._id,
+          name: req.user.name
+        },
+        createdAt: populatedMessage.createdAt,
+        timestamp: populatedMessage.createdAt
+      });
+    } catch (socketError) {
+      // Log error but don't fail the message send
+      console.error('Error emitting Socket.io event:', socketError);
+    }
+
     // Get recipient user (the other participant)
     const recipientId = chat.participants.find(
       (p) => p.toString() !== req.user._id.toString()
     );
 
     // Send FCM push notification to recipient if they're not connected via Socket.io
+    // Do this asynchronously after sending the response to avoid delaying the message
     if (recipientId) {
-      const { sendMessageNotification } = require('../utils/pushNotification');
-      const User = require('../models/User');
-      
-      try {
-        const sender = await User.findById(req.user._id).select('name profileImage');
-        const recipient = await User.findById(recipientId).select('name');
-        
-        // Check if recipient is connected via Socket.io
-        const { getIO } = require('../utils/socket');
-        const io = getIO();
-        const recipientSockets = await io.in(`user:${recipientId}`).fetchSockets();
-        
-        // Only send FCM if recipient is not actively connected
-        if (recipientSockets.length === 0) {
-          await sendMessageNotification(recipientId.toString(), {
-            senderName: sender?.name || 'Someone',
-            content: content.substring(0, 100), // Truncate long messages
-            chatId: chatId,
-            senderId: req.user._id.toString(),
-            senderAvatar: sender?.profileImage,
-            messageId: populatedMessage._id.toString()
-          });
+      // Run notification in background (don't await)
+      setImmediate(async () => {
+        try {
+          const { sendMessageNotification } = require('../utils/pushNotification');
+          const User = require('../models/User');
+          
+          const sender = await User.findById(req.user._id).select('name profileImage');
+          
+          // Check if recipient is connected via Socket.io
+          let isRecipientOnline = false;
+          try {
+            const { getIO } = require('../utils/socket');
+            const io = getIO();
+            const recipientSockets = await io.in(`user:${recipientId}`).fetchSockets();
+            isRecipientOnline = recipientSockets.length > 0;
+          } catch (socketCheckError) {
+            // If Socket.io check fails, assume user is offline and send FCM
+            console.warn('Error checking Socket.io connection:', socketCheckError);
+            isRecipientOnline = false;
+          }
+          
+          // Only send FCM if recipient is not actively connected
+          if (!isRecipientOnline) {
+            await sendMessageNotification(recipientId.toString(), {
+              senderName: sender?.name || 'Someone',
+              content: content.substring(0, 100), // Truncate long messages
+              chatId: chatId,
+              senderId: req.user._id.toString(),
+              senderAvatar: sender?.profileImage,
+              messageId: populatedMessage._id.toString()
+            });
+          }
+        } catch (notificationError) {
+          // Log error but don't fail the message send
+          console.error('Error sending push notification:', notificationError);
         }
-      } catch (notificationError) {
-        // Log error but don't fail the message send
-        console.error('Error sending push notification:', notificationError);
-      }
+      });
     }
-
-    // Emit Socket.io event for real-time updates (for connected users)
-    const { getIO } = require('../utils/socket');
-    const io = getIO();
-    io.to(`chat:${chatId}`).emit('message:new', {
-      id: populatedMessage._id,
-      chatId: chatId,
-      content: populatedMessage.content,
-      sender: {
-        id: req.user._id,
-        name: req.user.name
-      },
-      createdAt: populatedMessage.createdAt,
-      timestamp: populatedMessage.createdAt
-    });
 
     res.status(201).json({
       status: 'success',
