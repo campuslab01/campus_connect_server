@@ -6,6 +6,9 @@ const {
   likeConfession,
   unlikeConfession,
   addComment,
+  likeComment,
+  addReply,
+  likeReply,
   reportConfession,
   getMyConfessions,
   deleteConfession
@@ -48,6 +51,21 @@ router.delete('/:id/like', unlikeConfession);
 // @desc    Add comment to confession
 // @access  Private
 router.post('/:id/comments', validateComment, addComment);
+
+// @route   POST /api/confessions/:confessionId/comments/:commentIndex/like
+// @desc    Like/Unlike comment
+// @access  Private
+router.post('/:confessionId/comments/:commentIndex/like', likeComment);
+
+// @route   POST /api/confessions/:confessionId/comments/:commentIndex/replies
+// @desc    Add reply to comment
+// @access  Private
+router.post('/:confessionId/comments/:commentIndex/replies', validateComment, addReply);
+
+// @route   POST /api/confessions/:confessionId/comments/:commentIndex/replies/:replyIndex/like
+// @desc    Like/Unlike reply
+// @access  Private
+router.post('/:confessionId/comments/:commentIndex/replies/:replyIndex/like', likeReply);
 
 // @route   POST /api/confessions/:id/report
 // @desc    Report confession

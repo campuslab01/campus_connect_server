@@ -43,6 +43,34 @@ const confessionSchema = new mongoose.Schema({
       type: Boolean,
       default: true
     },
+    likes: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }],
+    replies: [{
+      author: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+      },
+      content: {
+        type: String,
+        required: true,
+        maxlength: [500, 'Reply cannot be more than 500 characters']
+      },
+      isAnonymous: {
+        type: Boolean,
+        default: true
+      },
+      likes: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }],
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    }],
     createdAt: {
       type: Date,
       default: Date.now
@@ -131,6 +159,8 @@ confessionSchema.methods.addComment = async function(authorId, content, isAnonym
     author: authorId,
     content,
     isAnonymous,
+    likes: [],
+    replies: [],
     createdAt: new Date()
   };
   
@@ -138,6 +168,62 @@ confessionSchema.methods.addComment = async function(authorId, content, isAnonym
   await this.save();
   
   return this.comments[this.comments.length - 1];
+};
+
+// Instance method to add reply to comment
+confessionSchema.methods.addReply = async function(commentIndex, authorId, content, isAnonymous = true) {
+  const reply = {
+    author: authorId,
+    content,
+    isAnonymous,
+    likes: [],
+    createdAt: new Date()
+  };
+  
+  if (this.comments[commentIndex]) {
+    this.comments[commentIndex].replies.push(reply);
+    await this.save();
+    return this.comments[commentIndex].replies[this.comments[commentIndex].replies.length - 1];
+  }
+  throw new Error('Comment not found');
+};
+
+// Instance method to like/unlike comment
+confessionSchema.methods.toggleCommentLike = async function(commentIndex, userId) {
+  if (!this.comments[commentIndex]) {
+    throw new Error('Comment not found');
+  }
+  
+  const comment = this.comments[commentIndex];
+  const likeIndex = comment.likes.indexOf(userId);
+  
+  if (likeIndex > -1) {
+    comment.likes.splice(likeIndex, 1);
+  } else {
+    comment.likes.push(userId);
+  }
+  
+  await this.save();
+  return comment.likes.includes(userId);
+};
+
+// Instance method to like/unlike reply
+confessionSchema.methods.toggleReplyLike = async function(commentIndex, replyIndex, userId) {
+  if (!this.comments[commentIndex] || !this.comments[commentIndex].replies[replyIndex]) {
+    throw new Error('Reply not found');
+  }
+  
+  const reply = this.comments[commentIndex].replies[replyIndex];
+  const likeIndex = reply.likes.indexOf(userId);
+  
+  if (likeIndex > -1) {
+    reply.likes.splice(likeIndex, 1);
+  } else {
+    reply.likes.push(userId);
+  }
+  
+  await this.save();
+  return reply.likes.includes(userId);
 };
 
 // Instance method to report confession

@@ -18,6 +18,7 @@ const getConfessions = async (req, res, next) => {
     const confessions = await Confession.find(query)
       .populate('author', 'name profileImage verified')
       .populate('comments.author', 'name profileImage verified')
+      .populate('comments.replies.author', 'name profileImage verified')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -50,6 +51,7 @@ const getConfession = async (req, res, next) => {
     const confession = await Confession.findById(req.params.id)
       .populate('author', 'name profileImage verified')
       .populate('comments.author', 'name profileImage verified')
+      .populate('comments.replies.author', 'name profileImage verified')
       .populate('likes', 'name profileImage');
 
     if (!confession) {
@@ -303,6 +305,7 @@ const getMyConfessions = async (req, res, next) => {
       isActive: true
     })
     .populate('comments.author', 'name profileImage verified')
+    .populate('comments.replies.author', 'name profileImage verified')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
@@ -364,6 +367,177 @@ const deleteConfession = async (req, res, next) => {
   }
 };
 
+// @desc    Like/Unlike comment
+// @route   POST /api/confessions/:confessionId/comments/:commentIndex/like
+// @access  Private
+const likeComment = async (req, res, next) => {
+  try {
+    const { confessionId, commentIndex } = req.params;
+    const confession = await Confession.findById(confessionId);
+
+    if (!confession) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Confession not found'
+      });
+    }
+
+    const index = parseInt(commentIndex);
+    if (!confession.comments[index]) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Comment not found'
+      });
+    }
+
+    const isLiked = await confession.toggleCommentLike(index, req.user._id);
+
+    // Populate comments.author for response
+    await confession.populate({
+      path: 'comments.author',
+      select: 'name profileImage verified'
+    });
+    await confession.populate({
+      path: 'comments.replies.author',
+      select: 'name profileImage verified'
+    });
+
+    const comment = confession.comments[index];
+
+    res.status(200).json({
+      status: 'success',
+      message: isLiked ? 'Comment liked successfully' : 'Comment unliked successfully',
+      data: {
+        comment: {
+          _id: comment._id,
+          likes: comment.likes,
+          likeCount: comment.likes.length,
+          isLiked: isLiked
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Add reply to comment
+// @route   POST /api/confessions/:confessionId/comments/:commentIndex/replies
+// @access  Private
+const addReply = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { confessionId, commentIndex } = req.params;
+    const { content, isAnonymous = true } = req.body;
+
+    const confession = await Confession.findById(confessionId);
+
+    if (!confession) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Confession not found'
+      });
+    }
+
+    if (!confession.isApproved || !confession.isActive) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Confession is not available'
+      });
+    }
+
+    const index = parseInt(commentIndex);
+    if (!confession.comments[index]) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Comment not found'
+      });
+    }
+
+    await confession.addReply(index, req.user._id, content, isAnonymous);
+    await confession.save();
+
+    // Populate replies.author at confession level
+    await confession.populate({
+      path: 'comments.replies.author',
+      select: 'name profileImage verified'
+    });
+
+    // Get the last reply (the one we just added)
+    const populatedReply = confession.comments[index].replies[confession.comments[index].replies.length - 1];
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Reply added successfully',
+      data: {
+        reply: populatedReply
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Like/Unlike reply
+// @route   POST /api/confessions/:confessionId/comments/:commentIndex/replies/:replyIndex/like
+// @access  Private
+const likeReply = async (req, res, next) => {
+  try {
+    const { confessionId, commentIndex, replyIndex } = req.params;
+    const confession = await Confession.findById(confessionId);
+
+    if (!confession) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Confession not found'
+      });
+    }
+
+    const cIndex = parseInt(commentIndex);
+    const rIndex = parseInt(replyIndex);
+
+    if (!confession.comments[cIndex] || !confession.comments[cIndex].replies[rIndex]) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Reply not found'
+      });
+    }
+
+    const isLiked = await confession.toggleReplyLike(cIndex, rIndex, req.user._id);
+
+    // Populate for response
+    await confession.populate({
+      path: 'comments.replies.author',
+      select: 'name profileImage verified'
+    });
+
+    const reply = confession.comments[cIndex].replies[rIndex];
+
+    res.status(200).json({
+      status: 'success',
+      message: isLiked ? 'Reply liked successfully' : 'Reply unliked successfully',
+      data: {
+        reply: {
+          _id: reply._id,
+          likes: reply.likes,
+          likeCount: reply.likes.length,
+          isLiked: isLiked
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getConfessions,
   getConfession,
@@ -371,6 +545,9 @@ module.exports = {
   likeConfession,
   unlikeConfession,
   addComment,
+  likeComment,
+  addReply,
+  likeReply,
   reportConfession,
   getMyConfessions,
   deleteConfession
