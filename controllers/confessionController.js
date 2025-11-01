@@ -94,12 +94,15 @@ const createConfession = async (req, res, next) => {
 
     const { content, category = 'personal', isAnonymous = true, tags = [] } = req.body;
 
+    // TODO: During testing phase, auto-approve confessions
+    // After testing, require admin approval (isApproved: false)
     const confession = await Confession.create({
       content,
       author: req.user._id,
       category,
       isAnonymous,
-      tags
+      tags,
+      isApproved: true // Auto-approve for testing
     });
 
     await confession.populate('author', 'name profileImage verified');
