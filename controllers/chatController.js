@@ -66,17 +66,25 @@ const getOrCreateChat = async (req, res, next) => {
       });
     }
 
+    // TODO: Re-enable matching requirement check after testing phase
+    // During testing phase, allow chatting without matching
     // Check if users have matched (can only chat with matches)
-    const currentUser = await User.findById(currentUserId);
-    if (!currentUser.matches.includes(userId)) {
-      return res.status(403).json({
-        status: 'error',
-        message: 'You can only chat with users you have matched with'
-      });
-    }
+    // const currentUser = await User.findById(currentUserId);
+    // if (!currentUser.matches.includes(userId)) {
+    //   return res.status(403).json({
+    //     status: 'error',
+    //     message: 'You can only chat with users you have matched with'
+    //   });
+    // }
 
     // Find or create chat
     const chat = await Chat.findOrCreateChat(currentUserId, userId);
+
+    // Populate participants with user info
+    await chat.populate({
+      path: 'participants',
+      select: 'name profileImage verified'
+    });
 
     // Populate the last few messages
     await chat.populate({
