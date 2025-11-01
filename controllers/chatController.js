@@ -204,14 +204,21 @@ const sendMessage = async (req, res, next) => {
     // Add message
     const message = await chat.addMessage(req.user._id, content, type, imageUrl);
 
-    // Populate sender info
-    await message.populate('sender', 'name profileImage');
+    // Repopulate chat to get sender info for messages
+    // Can't populate nested docs directly, so populate at chat level
+    await chat.populate({
+      path: 'messages.sender',
+      select: 'name profileImage'
+    });
+
+    // Get the last message (the one we just added) with populated sender
+    const populatedMessage = chat.messages[chat.messages.length - 1];
 
     res.status(201).json({
       status: 'success',
       message: 'Message sent successfully',
       data: {
-        message
+        message: populatedMessage
       }
     });
   } catch (error) {
