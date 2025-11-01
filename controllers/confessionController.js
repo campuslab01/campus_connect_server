@@ -229,15 +229,26 @@ const addComment = async (req, res, next) => {
       });
     }
 
-    const comment = await confession.addComment(req.user._id, content, isAnonymous);
+    // Add comment to confession
+    await confession.addComment(req.user._id, content, isAnonymous);
 
-    await comment.populate('author', 'name profileImage verified');
+    // Save confession to persist the comment
+    await confession.save();
+
+    // Populate comments.author at the confession level (can't populate nested docs directly)
+    await confession.populate({
+      path: 'comments.author',
+      select: 'name profileImage verified'
+    });
+
+    // Get the last comment (the one we just added) with populated author
+    const populatedComment = confession.comments[confession.comments.length - 1];
 
     res.status(201).json({
       status: 'success',
       message: 'Comment added successfully',
       data: {
-        comment
+        comment: populatedComment
       }
     });
   } catch (error) {
