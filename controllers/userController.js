@@ -316,32 +316,38 @@ const getSuggestedUsers = async (req, res, next) => {
     const { page = 1, limit = 10 } = req.query;
     const currentUser = await User.findById(req.user._id);
 
-    // Build suggestion criteria based on user preferences
-    const criteria = {
-      excludeId: req.user._id,
-      ageMin: currentUser.age - 3,
-      ageMax: currentUser.age + 3
-    };
+    if (!currentUser) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'User not found'
+      });
+    }
 
-    // Exclude already liked users
-    const excludeIds = [...currentUser.likes, ...currentUser.matches, req.user._id];
+    // TODO: During testing phase, show all users except current user
+    // After testing, re-enable filters for likes/matches/age/college
+    
+    // For testing: Only exclude current user and already matched users (but not likes)
+    // Exclude matches to avoid showing users you've already matched with
+    const excludeIds = [...(currentUser.matches || []), req.user._id];
 
     let mongoQuery = {
       isActive: true,
       _id: { $nin: excludeIds }
     };
 
-    // Age range
-    if (criteria.ageMin || criteria.ageMax) {
-      mongoQuery.age = {};
-      if (criteria.ageMin) mongoQuery.age.$gte = criteria.ageMin;
-      if (criteria.ageMax) mongoQuery.age.$lte = criteria.ageMax;
-    }
+    // TODO: Re-enable age range filter after testing
+    // Age range filter (disabled for testing)
+    // if (currentUser.age) {
+    //   const ageMin = currentUser.age - 3;
+    //   const ageMax = currentUser.age + 3;
+    //   mongoQuery.age = { $gte: ageMin, $lte: ageMax };
+    // }
 
-    // Same college preference (optional)
-    if (currentUser.lookingFor.includes('Friendship')) {
-      mongoQuery.college = currentUser.college;
-    }
+    // TODO: Re-enable college filter after testing
+    // Same college preference (optional - disabled for testing)
+    // if (currentUser.lookingFor && currentUser.lookingFor.includes('Friendship')) {
+    //   mongoQuery.college = currentUser.college;
+    // }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
