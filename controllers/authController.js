@@ -47,6 +47,13 @@ const register = async (req, res, next) => {
       });
     }
 
+    // Generate email verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const hashedVerificationToken = crypto
+      .createHash('sha256')
+      .update(verificationToken)
+      .digest('hex');
+
     // Create user
     const user = await User.create({
       name,
@@ -57,6 +64,8 @@ const register = async (req, res, next) => {
       college,
       department,
       year,
+      emailVerificationToken: hashedVerificationToken,
+      emailVerified: false
     });
 
     // Generate token
@@ -65,6 +74,26 @@ const register = async (req, res, next) => {
     // Remove password from response and normalize image URLs
     const publicProfile = user.getPublicProfile();
     const userResponse = normalizeUserImages(publicProfile);
+
+    // Send verification email asynchronously (don't block response)
+    setImmediate(async () => {
+      try {
+        const { Email, emailTemplates } = require('../utils/emailService');
+        const clientUrl = process.env.CLIENT_URL || 'https://campus-connect-swart-nine.vercel.app';
+        const verificationLink = `${clientUrl}/verify-email?token=${verificationToken}&userId=${user._id}`;
+        
+        await Email.create()
+          .to(email)
+          .subject('Verify Your Email - Campus Connection')
+          .html(emailTemplates.verificationEmail(name, verificationLink))
+          .send();
+        
+        console.log(`✅ Verification email sent to: ${email}`);
+      } catch (emailError) {
+        // Don't fail registration if email fails
+        console.error('Error sending verification email:', emailError);
+      }
+    });
 
     // Send welcome notification asynchronously (don't block response)
     // Note: At this point, user might not have FCM token yet (permission popup comes after)
@@ -81,7 +110,7 @@ const register = async (req, res, next) => {
 
     res.status(201).json({
       status: 'success',
-      message: 'User registered successfully',
+      message: 'User registered successfully. Please check your email to verify your account.',
       data: {
         user: userResponse,
         token
@@ -134,7 +163,6 @@ const login = async (req, res, next) => {
     next(error);
   }
 };
-
 
 // @desc    Get current user
 // @route   GET /api/auth/me
@@ -249,9 +277,10 @@ const forgotPassword = async (req, res, next) => {
     const user = await User.findOne({ email });
     
     if (!user) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'User not found with this email'
+      // Don't reveal if user exists or not for security
+      return res.status(200).json({
+        status: 'success',
+        message: 'If an account with that email exists, a password reset link has been sent.'
       });
     }
 
@@ -269,12 +298,76 @@ const forgotPassword = async (req, res, next) => {
     
     await user.save();
 
-    // TODO: Send email with reset token
-    // For now, just return the token (remove this in production)
+    // Send password reset email
+    setImmediate(async () => {
+      try {
+        const { Email, emailTemplates } = require('../utils/emailService');
+        const clientUrl = process.env.CLIENT_URL || 'https://campus-connect-swart-nine.vercel.app';
+        const resetLink = `${clientUrl}/reset-password?token=${resetToken}`;
+        
+        await Email.create()
+          .to(user.email)
+          .subject('Reset Your Password - Campus Connection')
+          .html(emailTemplates.passwordResetEmail(user.name, resetLink))
+          .send();
+        
+        console.log(`✅ Password reset email sent to: ${user.email}`);
+      } catch (emailError) {
+        // Don't fail the request if email fails
+        console.error('Error sending password reset email:', emailError);
+      }
+    });
+
     res.status(200).json({
       status: 'success',
-      message: 'Password reset token sent to email',
-      resetToken // Remove this in production
+      message: 'If an account with that email exists, a password reset link has been sent.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Verify email
+// @route   GET /api/auth/verify-email
+// @access  Public
+const verifyEmail = async (req, res, next) => {
+  try {
+    const { token, userId } = req.query;
+
+    if (!token || !userId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Token and userId are required'
+      });
+    }
+
+    // Hash the token
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    // Find user and verify token
+    const user = await User.findOne({
+      _id: userId,
+      emailVerificationToken: hashedToken
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid or expired verification token'
+      });
+    }
+
+    // Verify email
+    user.emailVerified = true;
+    user.emailVerificationToken = undefined;
+    await user.save();
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Email verified successfully'
     });
   } catch (error) {
     next(error);
@@ -288,6 +381,13 @@ const resetPassword = async (req, res, next) => {
   try {
     const { token } = req.params;
     const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Password is required'
+      });
+    }
 
     // Hash token
     const hashedToken = crypto
@@ -318,12 +418,15 @@ const resetPassword = async (req, res, next) => {
     // Generate new token
     const newToken = generateToken(user._id);
 
+    const publicProfile = user.getPublicProfile();
+    const normalizedUser = normalizeUserImages(publicProfile);
+
     res.status(200).json({
       status: 'success',
       message: 'Password reset successful',
       data: {
         token: newToken,
-        user: user.getPublicProfile()
+        user: normalizedUser
       }
     });
   } catch (error) {
@@ -357,6 +460,7 @@ module.exports = {
   updateProfile,
   changePassword,
   forgotPassword,
+  verifyEmail,
   resetPassword,
   logout
 };

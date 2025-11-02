@@ -6,6 +6,7 @@ const {
   updateProfile,
   changePassword,
   forgotPassword,
+  verifyEmail,
   resetPassword,
   logout
 } = require('../controllers/authController');
@@ -50,6 +51,11 @@ router.put('/change-password', authenticateToken, validatePasswordChange, change
 // @desc    Forgot password
 // @access  Public
 router.post('/forgot-password', validateForgotPassword, forgotPassword);
+
+// @route   GET /api/auth/verify-email
+// @desc    Verify email with token
+// @access  Public
+router.get('/verify-email', verifyEmail);
 
 // @route   PUT /api/auth/reset-password/:token
 // @desc    Reset password with token
