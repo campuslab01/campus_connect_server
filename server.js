@@ -118,14 +118,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Static files for uploads with CORS headers
 // Custom handler to ensure CORS headers on all responses
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'https://campuslab01.github.io',
-  'https://campuslab01.github.io/campus_connect',
-  'https://campus-connect-swart-nine.vercel.app',
-  process.env.CLIENT_URL
-];
+// Reuse allowedOrigins declared above
 
 app.use('/uploads', (req, res, next) => {
   const origin = req.headers.origin;
