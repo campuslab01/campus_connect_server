@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const { uploadToS3, deleteFromS3 } = require('../utils/upload');
+const { uploadImage, deleteImage: deleteImageFromStorage } = require('../utils/upload');
 
 // @desc    Upload profile image
 // @route   POST /api/upload/profile
@@ -13,15 +13,8 @@ const uploadProfileImage = async (req, res, next) => {
       });
     }
 
-    let imageUrl;
-
-    // Upload to S3 if configured, otherwise use absolute local URL
-    if (process.env.AWS_S3_BUCKET) {
-      imageUrl = await uploadToS3(req.file, 'profiles');
-    } else {
-      const origin = process.env.SERVER_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
-      imageUrl = `${origin}/uploads/${req.file.filename}`;
-    }
+    // Upload image (Cloudinary > S3 > Local)
+    const imageUrl = await uploadImage(req.file, 'profiles');
 
     // Update user's profile image
     const user = await User.findByIdAndUpdate(
@@ -57,17 +50,9 @@ const uploadImages = async (req, res, next) => {
 
     const imageUrls = [];
 
-    // Upload each file
+    // Upload each file (Cloudinary > S3 > Local)
     for (const file of req.files) {
-      let imageUrl;
-      
-      if (process.env.AWS_S3_BUCKET) {
-        imageUrl = await uploadToS3(file, 'profiles');
-      } else {
-        const origin = process.env.SERVER_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
-        imageUrl = `${origin}/uploads/${file.filename}`;
-      }
-      
+      const imageUrl = await uploadImage(file, 'profiles');
       imageUrls.push(imageUrl);
     }
 
@@ -133,10 +118,8 @@ const deleteImage = async (req, res, next) => {
 
     await user.save();
 
-    // Delete from S3 if configured
-    if (process.env.AWS_S3_BUCKET && imageUrl.includes('amazonaws.com')) {
-      await deleteFromS3(imageUrl);
-    }
+    // Delete from storage (Cloudinary/S3/Local)
+    await deleteImageFromStorage(imageUrl);
 
     res.status(200).json({
       status: 'success',
@@ -166,14 +149,8 @@ const replaceImageAtIndex = async (req, res, next) => {
     const user = await User.findById(req.user._id);
     const photos = Array.isArray(user.photos) ? user.photos : [];
 
-    // Construct new image URL
-    let newUrl;
-    if (process.env.AWS_S3_BUCKET) {
-      newUrl = await uploadToS3(req.file, 'profiles');
-    } else {
-      const origin = process.env.SERVER_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
-      newUrl = `${origin}/uploads/${req.file.filename}`;
-    }
+    // Upload new image (Cloudinary > S3 > Local)
+    const newUrl = await uploadImage(req.file, 'profiles');
 
     // If slot doesn't exist yet but below cap, expand to that slot if possible
     if (index >= photos.length) {
@@ -187,8 +164,9 @@ const replaceImageAtIndex = async (req, res, next) => {
       // Replace existing
       const oldUrl = photos[index];
       photos[index] = newUrl;
-      if (process.env.AWS_S3_BUCKET && oldUrl && oldUrl.includes('amazonaws.com')) {
-        await deleteFromS3(oldUrl);
+      // Delete old image from storage
+      if (oldUrl) {
+        await deleteImageFromStorage(oldUrl);
       }
       // If replaced main profile image
       if (user.profileImage === oldUrl) {
@@ -253,15 +231,8 @@ const uploadChatImage = async (req, res, next) => {
       });
     }
 
-    let imageUrl;
-
-    // Upload to S3 if configured, otherwise use absolute local URL
-    if (process.env.AWS_S3_BUCKET) {
-      imageUrl = await uploadToS3(req.file, 'chat');
-    } else {
-      const origin = process.env.SERVER_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
-      imageUrl = `${origin}/uploads/${req.file.filename}`;
-    }
+    // Upload chat image (Cloudinary > S3 > Local)
+    const imageUrl = await uploadImage(req.file, 'chat');
 
     res.status(200).json({
       status: 'success',

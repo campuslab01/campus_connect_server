@@ -206,8 +206,9 @@ const likeUser = async (req, res, next) => {
       });
     }
 
-    // Check if already liked
-    if (currentUser.likes.includes(targetUserId)) {
+    // Check if already liked (convert both to strings for comparison)
+    const likesAsStrings = currentUser.likes.map(like => like.toString());
+    if (likesAsStrings.includes(targetUserId.toString())) {
       return res.status(400).json({
         status: 'error',
         message: 'You have already liked this user'
@@ -218,9 +219,10 @@ const likeUser = async (req, res, next) => {
     currentUser.likes.push(targetUserId);
     targetUser.likedBy.push(currentUserId);
 
-    // Check for match
+    // Check for match (convert both to strings for comparison)
     let isMatch = false;
-    if (targetUser.likes.includes(currentUserId)) {
+    const targetUserLikesAsStrings = targetUser.likes.map(like => like.toString());
+    if (targetUserLikesAsStrings.includes(currentUserId.toString())) {
       isMatch = true;
       currentUser.matches.push(targetUserId);
       targetUser.matches.push(currentUserId);

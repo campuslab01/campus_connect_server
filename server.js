@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
 
 // Load environment variables
 // Updated for production deployment - October 28, 2025
@@ -116,8 +117,66 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Static files for uploads with CORS headers
+// Custom handler to ensure CORS headers on all responses
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://campuslab01.github.io',
+  'https://campuslab01.github.io/campus_connect',
+  'https://campus-connect-swart-nine.vercel.app',
+  process.env.CLIENT_URL
+];
+
 app.use('/uploads', (req, res, next) => {
-  // Set CORS headers for static file requests
+  const origin = req.headers.origin;
+  
+  // Store origin on request for use in setHeaders callback
+  req.corsOrigin = origin;
+  
+  // Handle OPTIONS requests
+  if (req.method === 'OPTIONS') {
+    const corsOrigin = (origin && allowedOrigins.includes(origin)) 
+      ? origin 
+      : 'https://campus-connect-swart-nine.vercel.app';
+    res.header('Access-Control-Allow-Origin', corsOrigin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    return res.status(200).end();
+  }
+  
+  next();
+}, express.static(path.join(__dirname, 'uploads'), {
+  setHeaders: (res, filePath, stat) => {
+    // Get origin from request object (stored in middleware above)
+    const origin = res.req?.corsOrigin || res.req?.headers?.origin;
+    
+    // Determine which origin to allow
+    const corsOrigin = (origin && allowedOrigins.includes(origin)) 
+      ? origin 
+      : 'https://campus-connect-swart-nine.vercel.app';
+    
+    // Set CORS headers - CRITICAL: must be set before response is sent
+    res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    // Set content-type for images
+    if (filePath.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (filePath.endsWith('.gif')) {
+      res.setHeader('Content-Type', 'image/gif');
+    } else if (filePath.endsWith('.webp')) {
+      res.setHeader('Content-Type', 'image/webp');
+    }
+  }
+}));
+
+// 404 handler for uploads (after static middleware) to ensure CORS on missing files
+app.use('/uploads', (req, res) => {
   const origin = req.headers.origin;
   const allowedOrigins = [
     'http://localhost:5173',
@@ -131,9 +190,19 @@ app.use('/uploads', (req, res, next) => {
   if (origin && allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+  } else {
+    // Default to allowing Vercel
+    res.header('Access-Control-Allow-Origin', 'https://campus-connect-swart-nine.vercel.app');
+    res.header('Access-Control-Allow-Credentials', 'true');
   }
-  next();
-}, express.static(path.join(__dirname, 'uploads')));
+  
+  res.status(404).json({
+    status: 'error',
+    message: 'Image not found'
+  });
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
