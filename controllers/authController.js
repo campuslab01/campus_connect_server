@@ -64,6 +64,19 @@ const register = async (req, res, next) => {
     // Remove password from response
     const userResponse = user.getPublicProfile();
 
+    // Send welcome notification asynchronously (don't block response)
+    // Note: At this point, user might not have FCM token yet (permission popup comes after)
+    // So we'll also send it when token is saved (see notificationController.js)
+    setImmediate(async () => {
+      try {
+        const { sendWelcomeNotification } = require('../utils/pushNotification');
+        await sendWelcomeNotification(user._id, user.name);
+      } catch (notificationError) {
+        // Don't fail registration if notification fails
+        console.error('Error sending welcome notification:', notificationError);
+      }
+    });
+
     res.status(201).json({
       status: 'success',
       message: 'User registered successfully',

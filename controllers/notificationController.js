@@ -86,6 +86,28 @@ const saveToken = async (req, res, next) => {
       }
     });
 
+    // Send welcome notification if this is a new token (first time allowing notifications)
+    // This ensures user gets welcome notification even if registration happened before permission popup
+    setImmediate(async () => {
+      try {
+        const User = require('../models/User');
+        const user = await User.findById(req.user._id).select('name createdAt');
+        
+        // Only send welcome notification if user was created recently (within last 5 minutes)
+        // This helps identify new registrations
+        const userAge = Date.now() - new Date(user.createdAt).getTime();
+        const fiveMinutes = 5 * 60 * 1000;
+        
+        if (userAge < fiveMinutes) {
+          const { sendWelcomeNotification } = require('../utils/pushNotification');
+          await sendWelcomeNotification(req.user._id, user.name);
+          console.log(`✅ Welcome notification sent to user: ${user.name}`);
+        }
+      } catch (notificationError) {
+        console.error('Error sending welcome notification after token save:', notificationError);
+      }
+    });
+
     res.status(201).json({
       status: 'success',
       message: 'FCM token saved successfully'

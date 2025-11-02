@@ -150,10 +150,27 @@ const sendConfessionNotification = async (userId, confessionData) => {
   });
 };
 
+/**
+ * Send welcome notification after registration
+ */
+const sendWelcomeNotification = async (userId, userName) => {
+  return sendPushNotification(userId, {
+    title: 'Welcome to Campus Connection! 🎉',
+    body: `Hi ${userName}, thanks for joining! Start connecting with students around you.`,
+    data: {
+      type: 'welcome',
+      userId: userId.toString(),
+      timestamp: new Date().toISOString()
+    },
+    image: undefined // Can add app logo later
+  });
+};
+
 module.exports = {
   sendPushNotification,
   sendMessageNotification,
   sendMatchNotification,
   sendLikeNotification,
-  sendConfessionNotification
+  sendConfessionNotification,
+  sendWelcomeNotification
 };
