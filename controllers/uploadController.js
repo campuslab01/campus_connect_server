@@ -14,7 +14,21 @@ const uploadProfileImage = async (req, res, next) => {
     }
 
     // Upload image (Cloudinary > S3 > Local)
+    console.log('📸 [UPLOAD PROFILE IMAGE] Starting upload:', {
+      userId: req.user._id,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      fileType: req.file.mimetype,
+      storageType: process.env.CLOUDINARY_CLOUD_NAME ? 'Cloudinary' : (process.env.AWS_S3_BUCKET ? 'S3' : 'Local')
+    });
+
     const imageUrl = await uploadImage(req.file, 'profiles');
+
+    console.log('✅ [UPLOAD PROFILE IMAGE] Upload successful:', {
+      userId: req.user._id,
+      imageUrl: imageUrl,
+      urlType: imageUrl.includes('cloudinary.com') ? 'Cloudinary' : (imageUrl.includes('amazonaws.com') ? 'S3' : 'Local')
+    });
 
     // Update user's profile image
     const user = await User.findByIdAndUpdate(
@@ -22,6 +36,12 @@ const uploadProfileImage = async (req, res, next) => {
       { profileImage: imageUrl },
       { new: true }
     );
+
+    console.log('💾 [UPLOAD PROFILE IMAGE] Saved to MongoDB:', {
+      userId: user._id,
+      profileImageSaved: !!user.profileImage,
+      profileImageUrl: user.profileImage ? user.profileImage.substring(0, 100) + '...' : 'none'
+    });
 
     res.status(200).json({
       status: 'success',
@@ -50,11 +70,39 @@ const uploadImages = async (req, res, next) => {
 
     const imageUrls = [];
 
+    console.log('📸 [UPLOAD IMAGES] Starting batch upload:', {
+      userId: req.user._id,
+      fileCount: req.files.length,
+      storageType: process.env.CLOUDINARY_CLOUD_NAME ? 'Cloudinary' : (process.env.AWS_S3_BUCKET ? 'S3' : 'Local'),
+      files: req.files.map((f) => ({
+        name: f.originalname,
+        size: f.size,
+        type: f.mimetype
+      }))
+    });
+
     // Upload each file (Cloudinary > S3 > Local)
-    for (const file of req.files) {
+    for (let i = 0; i < req.files.length; i++) {
+      const file = req.files[i];
+      console.log(`📤 [UPLOAD IMAGES] Uploading file ${i + 1}/${req.files.length}:`, {
+        fileName: file.originalname,
+        fileSize: file.size
+      });
+
       const imageUrl = await uploadImage(file, 'profiles');
+      
+      console.log(`✅ [UPLOAD IMAGES] File ${i + 1} uploaded successfully:`, {
+        imageUrl: imageUrl,
+        urlType: imageUrl.includes('cloudinary.com') ? 'Cloudinary' : (imageUrl.includes('amazonaws.com') ? 'S3' : 'Local')
+      });
+
       imageUrls.push(imageUrl);
     }
+
+    console.log('📸 [UPLOAD IMAGES] All files uploaded:', {
+      totalUploaded: imageUrls.length,
+      imageUrls: imageUrls.map(url => url.substring(0, 100) + '...')
+    });
 
     // Update user's photos array with a maximum of 3 images
     const user = await User.findById(req.user._id);
@@ -74,9 +122,17 @@ const uploadImages = async (req, res, next) => {
     // Set first photo as profile image if none exists
     if (!user.profileImage && imageUrls.length > 0) {
       user.profileImage = imageUrls[0];
+      console.log('📸 [UPLOAD IMAGES] Set first photo as profile image');
     }
     
     await user.save();
+
+    console.log('💾 [UPLOAD IMAGES] Saved to MongoDB:', {
+      userId: user._id,
+      totalPhotos: user.photos?.length || 0,
+      profileImage: user.profileImage ? user.profileImage.substring(0, 100) + '...' : 'none',
+      photos: user.photos?.map((p) => p ? p.substring(0, 100) + '...' : 'none') || []
+    });
 
     res.status(200).json({
       status: 'success',
@@ -149,8 +205,22 @@ const replaceImageAtIndex = async (req, res, next) => {
     const user = await User.findById(req.user._id);
     const photos = Array.isArray(user.photos) ? user.photos : [];
 
+    console.log('📸 [REPLACE IMAGE] Starting replace at index:', {
+      userId: req.user._id,
+      index: index,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      currentPhotoCount: photos.length,
+      oldUrl: photos[index] || 'none'
+    });
+
     // Upload new image (Cloudinary > S3 > Local)
     const newUrl = await uploadImage(req.file, 'profiles');
+
+    console.log('✅ [REPLACE IMAGE] New image uploaded:', {
+      newUrl: newUrl,
+      urlType: newUrl.includes('cloudinary.com') ? 'Cloudinary' : (newUrl.includes('amazonaws.com') ? 'S3' : 'Local')
+    });
 
     // If slot doesn't exist yet but below cap, expand to that slot if possible
     if (index >= photos.length) {
@@ -176,6 +246,14 @@ const replaceImageAtIndex = async (req, res, next) => {
 
     user.photos = photos.slice(0, 3);
     await user.save();
+
+    console.log('💾 [REPLACE IMAGE] Saved to MongoDB:', {
+      userId: user._id,
+      index: index,
+      totalPhotos: user.photos?.length || 0,
+      profileImage: user.profileImage ? user.profileImage.substring(0, 100) + '...' : 'none',
+      photos: user.photos?.map((p) => p ? p.substring(0, 100) + '...' : 'none') || []
+    });
 
     return res.status(200).json({
       status: 'success',

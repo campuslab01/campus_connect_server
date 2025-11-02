@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
 const { normalizeUserImages } = require('../utils/imageNormalizer');
+const { uploadBase64ToCloudinary } = require('../utils/upload');
 
 // Generate JWT Token
 const generateToken = (userId) => {
@@ -35,8 +36,18 @@ const register = async (req, res, next) => {
       college,
       department,
       year,
-      
+      profileImage,
+      photos
     } = req.body;
+
+    // Log image data received during registration
+    console.log('📸 [REGISTER] Image data received:', {
+      hasProfileImage: !!profileImage,
+      profileImageType: profileImage ? (profileImage.startsWith('data:') ? 'base64' : 'url') : 'none',
+      hasPhotos: !!photos,
+      photosCount: Array.isArray(photos) ? photos.length : 0,
+      photosTypes: Array.isArray(photos) ? photos.map((p) => p ? (p.startsWith('data:') ? 'base64' : 'url') : 'none') : []
+    });
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -54,8 +65,8 @@ const register = async (req, res, next) => {
       .update(verificationToken)
       .digest('hex');
 
-    // Create user
-    const user = await User.create({
+    // Prepare user data (handle images if provided)
+    const userData = {
       name,
       email,
       password,
@@ -66,6 +77,61 @@ const register = async (req, res, next) => {
       year,
       emailVerificationToken: hashedVerificationToken,
       emailVerified: false
+    };
+
+    // Upload profileImage to Cloudinary if provided as base64
+    if (profileImage && profileImage.startsWith('data:')) {
+      try {
+        console.log('📸 [REGISTER] Uploading profile image to Cloudinary...');
+        const cloudinaryUrl = await uploadBase64ToCloudinary(profileImage, 'profiles');
+        userData.profileImage = cloudinaryUrl;
+        console.log('✅ [REGISTER] Profile image uploaded to Cloudinary:', cloudinaryUrl.substring(0, 100) + '...');
+      } catch (uploadError) {
+        console.error('❌ [REGISTER] Failed to upload profile image to Cloudinary:', uploadError);
+        // Fallback: store base64 if Cloudinary upload fails (for development)
+        userData.profileImage = profileImage;
+      }
+    } else if (profileImage) {
+      // Already a URL, use directly
+      userData.profileImage = profileImage;
+    }
+
+    // Upload photos to Cloudinary if provided as base64
+    if (photos && Array.isArray(photos) && photos.length > 0) {
+      const uploadedPhotos = [];
+      for (let i = 0; i < photos.length; i++) {
+        const photo = photos[i];
+        if (photo && photo.startsWith('data:')) {
+          try {
+            console.log(`📸 [REGISTER] Uploading photo ${i + 1}/${photos.length} to Cloudinary...`);
+            const cloudinaryUrl = await uploadBase64ToCloudinary(photo, 'profiles');
+            uploadedPhotos.push(cloudinaryUrl);
+            console.log(`✅ [REGISTER] Photo ${i + 1} uploaded to Cloudinary`);
+          } catch (uploadError) {
+            console.error(`❌ [REGISTER] Failed to upload photo ${i + 1} to Cloudinary:`, uploadError);
+            // Fallback: store base64 if Cloudinary upload fails
+            uploadedPhotos.push(photo);
+          }
+        } else if (photo) {
+          // Already a URL, use directly
+          uploadedPhotos.push(photo);
+        }
+      }
+      userData.photos = uploadedPhotos;
+    }
+
+    // Create user
+    const user = await User.create(userData);
+
+    // Log saved user image data
+    console.log('✅ [REGISTER] User created with images:', {
+      userId: user._id,
+      email: user.email,
+      hasProfileImage: !!user.profileImage,
+      profileImageUrl: user.profileImage ? (user.profileImage.substring(0, 100) + '...') : 'none',
+      hasPhotos: !!user.photos,
+      photosCount: Array.isArray(user.photos) ? user.photos.length : 0,
+      photosUrls: Array.isArray(user.photos) ? user.photos.map((p) => p ? (p.substring(0, 100) + '...') : 'none') : []
     });
 
     // Generate token

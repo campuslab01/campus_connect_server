@@ -89,12 +89,66 @@ if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && proce
   console.log('✅ Cloudinary configured');
 }
 
+// Upload base64 image to Cloudinary
+const uploadBase64ToCloudinary = async (base64String, folder = 'profiles') => {
+  try {
+    if (!cloudinary) {
+      throw new Error('Cloudinary is not configured');
+    }
+
+    // Remove data URL prefix if present (e.g., "data:image/png;base64,")
+    const base64Data = base64String.includes(',') 
+      ? base64String.split(',')[1] 
+      : base64String;
+
+    console.log('☁️ [CLOUDINARY] Starting base64 upload:', {
+      folder: `campus-connection/${folder}`,
+      base64Length: base64Data.length
+    });
+
+    const result = await cloudinary.uploader.upload(
+      `data:image/jpeg;base64,${base64Data}`,
+      {
+        folder: `campus-connection/${folder}`,
+        use_filename: true,
+        unique_filename: true,
+        overwrite: false,
+        resource_type: 'image',
+        transformation: [
+          { width: 800, height: 800, crop: 'limit', quality: 'auto' }
+        ]
+      }
+    );
+
+    console.log('✅ [CLOUDINARY] Base64 upload successful:', {
+      publicId: result.public_id,
+      secureUrl: result.secure_url,
+      width: result.width,
+      height: result.height,
+      bytes: result.bytes,
+      format: result.format
+    });
+
+    return result.secure_url; // Use secure_url for HTTPS
+  } catch (error) {
+    console.error('❌ [CLOUDINARY] Base64 upload error:', error);
+    throw error;
+  }
+};
+
 // Upload to Cloudinary
 const uploadToCloudinary = async (file, folder = 'profiles') => {
   try {
     if (!cloudinary) {
       throw new Error('Cloudinary is not configured');
     }
+
+    console.log('☁️ [CLOUDINARY] Starting upload:', {
+      fileName: file.originalname,
+      filePath: file.path,
+      fileSize: file.size,
+      folder: `campus-connection/${folder}`
+    });
 
     const result = await cloudinary.uploader.upload(file.path, {
       folder: `campus-connection/${folder}`,
@@ -107,14 +161,25 @@ const uploadToCloudinary = async (file, folder = 'profiles') => {
       ]
     });
 
+    console.log('✅ [CLOUDINARY] Upload successful:', {
+      publicId: result.public_id,
+      secureUrl: result.secure_url,
+      url: result.url,
+      width: result.width,
+      height: result.height,
+      bytes: result.bytes,
+      format: result.format
+    });
+
     // Delete local file after Cloudinary upload
     if (fs.existsSync(file.path)) {
       fs.unlinkSync(file.path);
+      console.log('🗑️ [CLOUDINARY] Local file deleted:', file.path);
     }
 
     return result.secure_url; // Use secure_url for HTTPS
   } catch (error) {
-    console.error('Cloudinary upload error:', error);
+    console.error('❌ [CLOUDINARY] Upload error:', error);
     throw error;
   }
 };
@@ -214,15 +279,27 @@ const deleteFromS3 = async (url) => {
 
 // Main upload function - prioritizes Cloudinary > S3 > Local
 const uploadImage = async (file, folder = 'profiles') => {
+  console.log('📤 [UPLOAD IMAGE] Determining storage method:', {
+    hasCloudinary: !!cloudinary,
+    hasS3: !!s3,
+    fileName: file.originalname,
+    folder: folder
+  });
+
   // Priority: Cloudinary > S3 > Local
   if (cloudinary) {
+    console.log('☁️ [UPLOAD IMAGE] Using Cloudinary storage');
     return await uploadToCloudinary(file, folder);
   } else if (s3) {
+    console.log('📦 [UPLOAD IMAGE] Using S3 storage');
     return await uploadToS3(file, folder);
   } else {
+    console.log('💾 [UPLOAD IMAGE] Using Local storage (not recommended for production)');
     // Local storage (development only - not recommended for production)
     const origin = process.env.SERVER_PUBLIC_URL || process.env.CLIENT_URL?.replace('/api', '') || 'https://campus-connect-server-yqbh.onrender.com';
-    return `${origin}/uploads/${file.filename}`;
+    const localUrl = `${origin}/uploads/${file.filename}`;
+    console.log('📍 [UPLOAD IMAGE] Local URL generated:', localUrl);
+    return localUrl;
   }
 };
 
@@ -291,6 +368,7 @@ module.exports = {
   uploadMultiple,
   uploadProfileImage,
   uploadImage, // Main upload function (Cloudinary > S3 > Local)
+  uploadBase64ToCloudinary, // Upload base64 images to Cloudinary
   deleteImage, // Main delete function
   uploadToCloudinary,
   deleteFromCloudinary,

@@ -10,7 +10,13 @@ const validateRegistration = [
   body('email')
     .isEmail()
     .normalizeEmail()
-    .withMessage('Please provide a valid email'),
+    .custom((value) => {
+      if (!value.endsWith('@gmail.com')) {
+        throw new Error('Email must be a Gmail account (@gmail.com)');
+      }
+      return true;
+    })
+    .withMessage('Please provide a valid Gmail address'),
   
   body('password')
     .isLength({ min: 6 })
@@ -93,7 +99,13 @@ const validateLogin = [
   body('email')
     .isEmail()
     .normalizeEmail()
-    .withMessage('Please provide a valid email'),
+    .custom((value) => {
+      if (!value.endsWith('@gmail.com')) {
+        throw new Error('Email must be a Gmail account (@gmail.com)');
+      }
+      return true;
+    })
+    .withMessage('Please provide a valid Gmail address'),
   
   body('password')
     .notEmpty()
