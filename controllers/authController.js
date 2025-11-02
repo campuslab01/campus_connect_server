@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
+const { normalizeUserImages } = require('../utils/imageNormalizer');
 
 // Generate JWT Token
 const generateToken = (userId) => {
@@ -61,8 +62,9 @@ const register = async (req, res, next) => {
     // Generate token
     const token = generateToken(user._id);
 
-    // Remove password from response
-    const userResponse = user.getPublicProfile();
+    // Remove password from response and normalize image URLs
+    const publicProfile = user.getPublicProfile();
+    const userResponse = normalizeUserImages(publicProfile);
 
     // Send welcome notification asynchronously (don't block response)
     // Note: At this point, user might not have FCM token yet (permission popup comes after)
@@ -124,7 +126,8 @@ const login = async (req, res, next) => {
     }
 
     const token = generateToken(user._id);
-    const userResponse = user.getPublicProfile();
+    const publicProfile = user.getPublicProfile();
+    const userResponse = normalizeUserImages(publicProfile);
 
     res.status(200).json({ status: 'success', message: 'Login successful', data: { user: userResponse, token } });
   } catch (error) {
@@ -139,11 +142,13 @@ const login = async (req, res, next) => {
 const getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id);
+    const publicProfile = user.getPublicProfile();
+    const normalizedUser = normalizeUserImages(publicProfile);
     
     res.status(200).json({
       status: 'success',
       data: {
-        user: user.getPublicProfile()
+        user: normalizedUser
       }
     });
   } catch (error) {
@@ -186,11 +191,14 @@ const updateProfile = async (req, res, next) => {
       { new: true, runValidators: true }
     );
 
+    const publicProfile = user.getPublicProfile();
+    const normalizedUser = normalizeUserImages(publicProfile);
+
     res.status(200).json({
       status: 'success',
       message: 'Profile updated successfully',
       data: {
-        user: user.getPublicProfile()
+        user: normalizedUser
       }
     });
   } catch (error) {

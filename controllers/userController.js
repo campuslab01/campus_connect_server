@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
+const { normalizeUserImages } = require('../utils/imageNormalizer');
 
 // @desc    Search users
 // @route   GET /api/users/search
@@ -112,17 +113,20 @@ const searchUsers = async (req, res, next) => {
       .skip(skip)
       .limit(parseInt(limit));
 
+    // Normalize image URLs for all users
+    const normalizedUsers = users.map(user => normalizeUserImages(user.toObject()));
+
     const total = await User.countDocuments(mongoQuery);
 
     res.status(200).json({
       status: 'success',
       data: {
-        users,
+        users: normalizedUsers,
         pagination: {
           currentPage: parseInt(page),
           totalPages: Math.ceil(total / parseInt(limit)),
           totalUsers: total,
-          hasNext: skip + users.length < total,
+          hasNext: skip + normalizedUsers.length < total,
           hasPrev: parseInt(page) > 1
         }
       }
@@ -154,10 +158,14 @@ const getUserProfile = async (req, res, next) => {
       });
     }
 
+    // Normalize image URLs
+    const publicProfile = user.getPublicProfile();
+    const normalizedUser = normalizeUserImages(publicProfile);
+
     res.status(200).json({
       status: 'success',
       data: {
-        user: user.getPublicProfile()
+        user: normalizedUser
       }
     });
   } catch (error) {
@@ -423,17 +431,20 @@ const getSuggestedUsers = async (req, res, next) => {
       .skip(skip)
       .limit(parseInt(limit));
 
+    // Normalize image URLs for all users
+    const normalizedUsers = users.map(user => normalizeUserImages(user.toObject()));
+
     const total = await User.countDocuments(mongoQuery);
 
     res.status(200).json({
       status: 'success',
       data: {
-        users,
+        users: normalizedUsers,
         pagination: {
           currentPage: parseInt(page),
           totalPages: Math.ceil(total / parseInt(limit)),
           totalUsers: total,
-          hasNext: skip + users.length < total,
+          hasNext: skip + normalizedUsers.length < total,
           hasPrev: parseInt(page) > 1
         }
       }
