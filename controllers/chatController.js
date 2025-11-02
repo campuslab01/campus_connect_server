@@ -214,6 +214,32 @@ const sendMessage = async (req, res, next) => {
     // Get the last message (the one we just added) with populated sender
     const populatedMessage = chat.messages[chat.messages.length - 1];
 
+    // Check if quiz consent should be triggered (at 15-20 messages)
+    // Only trigger if quiz hasn't been asked yet and messages are between 15-20
+    const totalMessages = chat.messages.length;
+    const shouldTriggerQuizConsent = totalMessages >= 15 && totalMessages <= 20 && 
+                                     !chat.quizConsent.askedAt && 
+                                     chat.quizConsent.user1Consent === null && 
+                                     chat.quizConsent.user2Consent === null;
+    
+    if (shouldTriggerQuizConsent) {
+      // Set askedAt timestamp
+      chat.quizConsent.askedAt = new Date();
+      await chat.save();
+      
+      // Emit quiz consent request to both users in the chat
+      try {
+        const { getIO } = require('../utils/socket');
+        const io = getIO();
+        io.to(`chat:${chatId}`).emit('quiz:consent-request', {
+          chatId: chatId,
+          messageCount: totalMessages
+        });
+      } catch (socketError) {
+        console.error('Error emitting quiz consent request:', socketError);
+      }
+    }
+
     // Emit Socket.io event for real-time updates (for connected users)
     try {
       const { getIO } = require('../utils/socket');

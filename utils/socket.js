@@ -143,6 +143,14 @@ const initializeSocket = (httpServer) => {
         consent: consent,
         userId: socket.userId
       });
+      
+      // If user denied, notify the other user with a special event
+      if (consent === false) {
+        io.to(`chat:${chatId}`).emit('quiz:consent-denied', {
+          chatId: chatId,
+          deniedBy: socket.userId
+        });
+      }
     });
 
     // Handle quiz score exchange
