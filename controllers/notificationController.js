@@ -93,18 +93,27 @@ const saveToken = async (req, res, next) => {
         const User = require('../models/User');
         const user = await User.findById(req.user._id).select('name createdAt');
         
-        // Only send welcome notification if user was created recently (within last 5 minutes)
-        // This helps identify new registrations
-        const userAge = Date.now() - new Date(user.createdAt).getTime();
-        const fiveMinutes = 5 * 60 * 1000;
+        if (!user) {
+          console.log('⚠️ User not found for welcome notification');
+          return;
+        }
         
-        if (userAge < fiveMinutes) {
+        // Only send welcome notification if user was created recently (within last 10 minutes)
+        // This helps identify new registrations (increased from 5 to 10 minutes for safety)
+        const userAge = Date.now() - new Date(user.createdAt).getTime();
+        const tenMinutes = 10 * 60 * 1000;
+        
+        console.log(`🔍 Checking welcome notification for user: ${user.name}, age: ${Math.round(userAge / 1000)}s`);
+        
+        if (userAge < tenMinutes) {
           const { sendWelcomeNotification } = require('../utils/pushNotification');
           await sendWelcomeNotification(req.user._id, user.name);
           console.log(`✅ Welcome notification sent to user: ${user.name}`);
+        } else {
+          console.log(`⏭️ Skipping welcome notification - user created ${Math.round(userAge / 60000)} minutes ago`);
         }
       } catch (notificationError) {
-        console.error('Error sending welcome notification after token save:', notificationError);
+        console.error('❌ Error sending welcome notification after token save:', notificationError);
       }
     });
 
