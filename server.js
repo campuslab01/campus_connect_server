@@ -22,6 +22,7 @@ const userRoutes = require('./routes/users');
 const uploadRoutes = require('./routes/upload');
 const chatRoutes = require('./routes/chat');
 const confessionRoutes = require('./routes/confession');
+const notificationRoutes = require('./routes/notifications');
 
 // Import middleware
 const errorHandler = require('./middlewares/errorHandler');
@@ -133,6 +134,7 @@ app.use('/api/users', authenticateToken, searchLimiter, userRoutes);
 app.use('/api/upload', authenticateToken, uploadLimiter, uploadRoutes);
 app.use('/api/chat', authenticateToken, chatRoutes);
 app.use('/api/confessions', authenticateToken, confessionRoutes);
+app.use('/api/notifications', authenticateToken, notificationRoutes);
 
 // 404 handler - catch all routes that don't match any API endpoints
 app.use((req, res) => {

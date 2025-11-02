@@ -53,6 +53,43 @@ const chatSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // Compatibility Quiz
+  quizConsent: {
+    user1Consent: {
+      type: Boolean,
+      default: null
+    },
+    user2Consent: {
+      type: Boolean,
+      default: null
+    },
+    askedAt: {
+      type: Date,
+      default: null
+    }
+  },
+  quizScores: {
+    user1Score: {
+      type: Number,
+      default: null
+    },
+    user2Score: {
+      type: Number,
+      default: null
+    },
+    user1CompletedAt: {
+      type: Date,
+      default: null
+    },
+    user2CompletedAt: {
+      type: Date,
+      default: null
+    }
+  },
+  compatibilityScore: {
+    type: Number,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

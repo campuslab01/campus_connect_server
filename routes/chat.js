@@ -6,7 +6,10 @@ const {
   sendMessage,
   markAsRead,
   deleteChat,
-  getUnreadCount
+  getUnreadCount,
+  getQuizConsent,
+  setQuizConsent,
+  submitQuiz
 } = require('../controllers/chatController');
 const { validateMessage } = require('../middlewares/validation');
 
@@ -41,6 +44,21 @@ router.post('/:chatId/messages', validateMessage, sendMessage);
 // @desc    Mark messages as read
 // @access  Private
 router.put('/:chatId/read', markAsRead);
+
+// @route   GET /api/chat/:chatId/quiz-consent
+// @desc    Get quiz consent status
+// @access  Private
+router.get('/:chatId/quiz-consent', getQuizConsent);
+
+// @route   POST /api/chat/:chatId/quiz-consent
+// @desc    Set quiz consent
+// @access  Private
+router.post('/:chatId/quiz-consent', setQuizConsent);
+
+// @route   POST /api/chat/:chatId/quiz/submit
+// @desc    Submit compatibility quiz
+// @access  Private
+router.post('/:chatId/quiz/submit', submitQuiz);
 
 // @route   DELETE /api/chat/:chatId
 // @desc    Delete chat

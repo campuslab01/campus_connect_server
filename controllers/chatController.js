@@ -396,6 +396,193 @@ const getUnreadCount = async (req, res, next) => {
   }
 };
 
+// @desc    Get quiz consent status
+// @route   GET /api/chat/:chatId/quiz-consent
+// @access  Private
+const getQuizConsent = async (req, res, next) => {
+  try {
+    const chatId = req.params.chatId;
+    const userId = req.user._id;
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Chat not found'
+      });
+    }
+
+    // Check if user is a participant
+    const isParticipant = chat.participants.some(p => p.toString() === userId.toString());
+    if (!isParticipant) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Access denied'
+      });
+    }
+
+    // Determine which consent field belongs to current user
+    const userIndex = chat.participants.findIndex(p => p.toString() === userId.toString());
+    const userConsent = userIndex === 0 ? chat.quizConsent.user1Consent : chat.quizConsent.user2Consent;
+    const otherUserConsent = userIndex === 0 ? chat.quizConsent.user2Consent : chat.quizConsent.user1Consent;
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        userConsent: userConsent === null ? undefined : userConsent,
+        otherUserConsent: otherUserConsent === null ? undefined : otherUserConsent
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Set quiz consent
+// @route   POST /api/chat/:chatId/quiz-consent
+// @access  Private
+const setQuizConsent = async (req, res, next) => {
+  try {
+    const chatId = req.params.chatId;
+    const userId = req.user._id;
+    const { consent } = req.body;
+
+    if (typeof consent !== 'boolean') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Consent must be a boolean value'
+      });
+    }
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Chat not found'
+      });
+    }
+
+    const isParticipant = chat.participants.some(p => p.toString() === userId.toString());
+    if (!isParticipant) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Access denied'
+      });
+    }
+
+    const userIndex = chat.participants.findIndex(p => p.toString() === userId.toString());
+    
+    if (userIndex === 0) {
+      chat.quizConsent.user1Consent = consent;
+    } else {
+      chat.quizConsent.user2Consent = consent;
+    }
+
+    if (!chat.quizConsent.askedAt) {
+      chat.quizConsent.askedAt = new Date();
+    }
+
+    await chat.save();
+
+    // Emit socket event to notify other user
+    const { getIO } = require('../utils/socket');
+    const io = getIO();
+    const otherUserId = chat.participants[userIndex === 0 ? 1 : 0];
+    io.to(`user:${otherUserId}`).emit('quiz:consent-update', {
+      chatId: chatId,
+      consent: consent,
+      userId: userId.toString()
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Quiz consent updated',
+      data: {
+        userConsent: consent,
+        bothConsented: (userIndex === 0 ? chat.quizConsent.user2Consent : chat.quizConsent.user1Consent) === true && consent === true
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Submit quiz
+// @route   POST /api/chat/:chatId/quiz/submit
+// @access  Private
+const submitQuiz = async (req, res, next) => {
+  try {
+    const chatId = req.params.chatId;
+    const userId = req.user._id;
+    const { answers, score } = req.body;
+
+    if (!answers || typeof score !== 'number') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Answers and score are required'
+      });
+    }
+
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Chat not found'
+      });
+    }
+
+    const isParticipant = chat.participants.some(p => p.toString() === userId.toString());
+    if (!isParticipant) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Access denied'
+      });
+    }
+
+    const userIndex = chat.participants.findIndex(p => p.toString() === userId.toString());
+    const user = await User.findById(userId).select('name');
+
+    if (userIndex === 0) {
+      chat.quizScores.user1Score = score;
+      chat.quizScores.user1CompletedAt = new Date();
+    } else {
+      chat.quizScores.user2Score = score;
+      chat.quizScores.user2CompletedAt = new Date();
+    }
+
+    // Calculate compatibility score if both completed
+    if (chat.quizScores.user1Score !== null && chat.quizScores.user2Score !== null) {
+      // Simple compatibility: average of both scores, or implement matching algorithm
+      const avgScore = Math.round((chat.quizScores.user1Score + chat.quizScores.user2Score) / 2);
+      chat.compatibilityScore = avgScore;
+    }
+
+    await chat.save();
+
+    // Emit socket event to exchange scores with other user
+    const { getIO } = require('../utils/socket');
+    const io = getIO();
+    const otherUserId = chat.participants[userIndex === 0 ? 1 : 0];
+    io.to(`chat:${chatId}`).emit('quiz:score', {
+      chatId: chatId,
+      score: score,
+      userName: user.name,
+      userId: userId.toString()
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Quiz submitted successfully',
+      data: {
+        score: score,
+        compatibilityScore: chat.compatibilityScore
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getUserChats,
   getOrCreateChat,
@@ -403,5 +590,8 @@ module.exports = {
   sendMessage,
   markAsRead,
   deleteChat,
-  getUnreadCount
+  getUnreadCount,
+  getQuizConsent,
+  setQuizConsent,
+  submitQuiz
 };

@@ -134,6 +134,28 @@ const initializeSocket = (httpServer) => {
       io.emit('confession:new', data);
     });
 
+    // Handle quiz consent
+    socket.on('quiz:consent', (data) => {
+      const { chatId, consent } = data;
+      // Notify other user in the chat
+      io.to(`chat:${chatId}`).emit('quiz:consent-update', {
+        chatId: chatId,
+        consent: consent,
+        userId: socket.userId
+      });
+    });
+
+    // Handle quiz score exchange
+    socket.on('quiz:score', (data) => {
+      const { chatId, score, userName } = data;
+      // Broadcast score to other user in chat
+      io.to(`chat:${chatId}`).emit('quiz:score', {
+        chatId: chatId,
+        score: score,
+        userName: userName || 'Your match'
+      });
+    });
+
     // Handle disconnection
     socket.on('disconnect', () => {
       console.log(`❌ User disconnected: ${socket.userId} (${socket.id})`);
