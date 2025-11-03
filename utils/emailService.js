@@ -14,20 +14,35 @@ const initializeEmailService = () => {
   if (transporter) return transporter;
 
   // Get email configuration from environment variables
+  // Remove quotes from password if present (common issue with Render env vars)
+  const smtpPass = process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/^["']|["']$/g, '') : null;
+  const smtpUser = process.env.SMTP_USER ? process.env.SMTP_USER.replace(/^["']|["']$/g, '') : null;
+  
   const emailConfig = {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT || '587'),
     secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
+      user: smtpUser,
+      pass: smtpPass
     }
   };
+
+  // Log configuration (without password)
+  console.log('📧 Email Service Configuration:');
+  console.log('   Host:', emailConfig.host);
+  console.log('   Port:', emailConfig.port);
+  console.log('   Secure:', emailConfig.secure);
+  console.log('   User:', emailConfig.auth.user || 'NOT SET');
+  console.log('   Password:', emailConfig.auth.pass ? '***SET***' : 'NOT SET');
+  console.log('   From:', process.env.SMTP_FROM || emailConfig.auth.user || 'NOT SET');
 
   // If credentials are not provided, create a test account (development only)
   if (!emailConfig.auth.user || !emailConfig.auth.pass) {
     if (process.env.NODE_ENV === 'production') {
-      console.warn('⚠️ SMTP credentials not configured - emails will not be sent');
+      console.error('❌ SMTP credentials not configured - emails will not be sent');
+      console.error('   SMTP_USER:', emailConfig.auth.user ? 'SET' : 'MISSING');
+      console.error('   SMTP_PASS:', emailConfig.auth.pass ? 'SET' : 'MISSING');
       return null;
     }
     // For development, use ethereal.email test account
@@ -37,10 +52,25 @@ const initializeEmailService = () => {
 
   try {
     transporter = nodemailer.createTransport(emailConfig);
-    console.log('✅ Email service initialized');
+    
+    // Verify connection
+    transporter.verify((error, success) => {
+      if (error) {
+        console.error('❌ Email service verification failed:', error.message);
+        console.error('   Error code:', error.code);
+        console.error('   Error command:', error.command);
+        if (error.response) {
+          console.error('   SMTP response:', error.response);
+        }
+      } else {
+        console.log('✅ Email service initialized and verified successfully');
+      }
+    });
+    
     return transporter;
   } catch (error) {
-    console.error('❌ Error initializing email service:', error);
+    console.error('❌ Error initializing email service:', error.message);
+    console.error('   Full error:', error);
     return null;
   }
 };
@@ -98,11 +128,29 @@ class EmailBuilder {
     }
 
     try {
+      // Verify transporter is ready
+      if (!transporter) {
+        throw new Error('Email transporter not initialized');
+      }
+
       const info = await transporter.sendMail(this.mailOptions);
-      console.log('✅ Email sent:', info.messageId);
+      console.log('✅ Email sent successfully');
+      console.log('   Message ID:', info.messageId);
+      console.log('   To:', this.mailOptions.to);
+      console.log('   Subject:', this.mailOptions.subject);
       return info;
     } catch (error) {
-      console.error('❌ Error sending email:', error);
+      console.error('❌ Error sending email:');
+      console.error('   Error message:', error.message);
+      console.error('   Error code:', error.code);
+      console.error('   To:', this.mailOptions.to);
+      console.error('   Subject:', this.mailOptions.subject);
+      if (error.response) {
+        console.error('   SMTP Response:', error.response);
+      }
+      if (error.responseCode) {
+        console.error('   Response Code:', error.responseCode);
+      }
       throw error;
     }
   }

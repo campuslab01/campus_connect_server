@@ -16,6 +16,13 @@ console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
 console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
 console.log('CLIENT_URL:', process.env.CLIENT_URL || 'NOT SET');
 console.log('NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
+console.log('SMTP_HOST:', process.env.SMTP_HOST || 'NOT SET');
+console.log('SMTP_USER:', process.env.SMTP_USER ? 'SET' : 'NOT SET');
+console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'SET' : 'NOT SET');
+
+// Initialize email service
+const { initializeEmailService } = require('./utils/emailService');
+initializeEmailService();
 
 // Import routes
 const authRoutes = require('./routes/auth');

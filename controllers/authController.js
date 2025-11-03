@@ -369,7 +369,12 @@ const forgotPassword = async (req, res, next) => {
       try {
         const { Email, emailTemplates } = require('../utils/emailService');
         const clientUrl = process.env.CLIENT_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5173');
-        const resetLink = `${clientUrl}/reset-password?token=${resetToken}`;
+        // Remove trailing slash if present
+        const cleanClientUrl = clientUrl.replace(/\/$/, '');
+        const resetLink = `${cleanClientUrl}/reset-password?token=${resetToken}&userId=${user._id}`;
+        
+        console.log(`📧 Attempting to send password reset email to: ${user.email}`);
+        console.log(`   Reset link: ${resetLink}`);
         
         await Email.create()
           .to(user.email)
@@ -377,10 +382,17 @@ const forgotPassword = async (req, res, next) => {
           .html(emailTemplates.passwordResetEmail(user.name, resetLink))
           .send();
         
-        console.log(`✅ Password reset email sent to: ${user.email}`);
+        console.log(`✅ Password reset email sent successfully to: ${user.email}`);
       } catch (emailError) {
-        // Don't fail the request if email fails
-        console.error('Error sending password reset email:', emailError);
+        // Log detailed error for debugging
+        console.error('❌ Error sending password reset email:');
+        console.error('   User email:', user.email);
+        console.error('   Error message:', emailError.message);
+        console.error('   Error code:', emailError.code);
+        if (emailError.response) {
+          console.error('   SMTP response:', emailError.response);
+        }
+        // Don't fail the request if email fails - security best practice
       }
     });
 
