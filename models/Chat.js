@@ -53,6 +53,31 @@ const chatSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // Chat Request Functionality
+  chatRequest: {
+    requestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    requestedAt: {
+      type: Date,
+      default: null
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'accepted', 'rejected', null],
+      default: null
+    },
+    acceptedAt: {
+      type: Date,
+      default: null
+    },
+    rejectedAt: {
+      type: Date,
+      default: null
+    }
+  },
   // Compatibility Quiz
   quizConsent: {
     user1Consent: {

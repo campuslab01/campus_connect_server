@@ -296,7 +296,7 @@ const uploadImage = async (file, folder = 'profiles') => {
   } else {
     console.log('💾 [UPLOAD IMAGE] Using Local storage (not recommended for production)');
     // Local storage (development only - not recommended for production)
-    const origin = process.env.SERVER_PUBLIC_URL || process.env.CLIENT_URL?.replace('/api', '') || 'https://campus-connect-server-yqbh.onrender.com';
+    const origin = process.env.SERVER_PUBLIC_URL || (process.env.CLIENT_URL ? process.env.CLIENT_URL.replace('/api', '') : null) || (process.env.RENDER_EXTERNAL_URL || process.env.VERCEL_URL ? `https://${process.env.RENDER_EXTERNAL_URL || process.env.VERCEL_URL}` : 'http://localhost:5000');
     const localUrl = `${origin}/uploads/${file.filename}`;
     console.log('📍 [UPLOAD IMAGE] Local URL generated:', localUrl);
     return localUrl;

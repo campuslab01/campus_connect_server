@@ -9,7 +9,9 @@ const {
   getUnreadCount,
   getQuizConsent,
   setQuizConsent,
-  submitQuiz
+  submitQuiz,
+  acceptChatRequest,
+  rejectChatRequest
 } = require('../controllers/chatController');
 const { validateMessage } = require('../middlewares/validation');
 
@@ -59,6 +61,16 @@ router.post('/:chatId/quiz-consent', setQuizConsent);
 // @desc    Submit compatibility quiz
 // @access  Private
 router.post('/:chatId/quiz/submit', submitQuiz);
+
+// @route   POST /api/chat/:chatId/accept
+// @desc    Accept chat request
+// @access  Private
+router.post('/:chatId/accept', acceptChatRequest);
+
+// @route   POST /api/chat/:chatId/reject
+// @desc    Reject chat request
+// @access  Private
+router.post('/:chatId/reject', rejectChatRequest);
 
 // @route   DELETE /api/chat/:chatId
 // @desc    Delete chat

@@ -145,7 +145,7 @@ const register = async (req, res, next) => {
     setImmediate(async () => {
       try {
         const { Email, emailTemplates } = require('../utils/emailService');
-        const clientUrl = process.env.CLIENT_URL || 'https://campus-connect-swart-nine.vercel.app';
+        const clientUrl = process.env.CLIENT_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5173');
         const verificationLink = `${clientUrl}/verify-email?token=${verificationToken}&userId=${user._id}`;
         
         await Email.create()
@@ -368,7 +368,7 @@ const forgotPassword = async (req, res, next) => {
     setImmediate(async () => {
       try {
         const { Email, emailTemplates } = require('../utils/emailService');
-        const clientUrl = process.env.CLIENT_URL || 'https://campus-connect-swart-nine.vercel.app';
+        const clientUrl = process.env.CLIENT_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5173');
         const resetLink = `${clientUrl}/reset-password?token=${resetToken}`;
         
         await Email.create()

@@ -164,6 +164,25 @@ const initializeSocket = (httpServer) => {
       });
     });
 
+    // Handle premium activation (from payment webhook)
+    socket.on('premium:activate', (data) => {
+      const { userId } = data;
+      io.to(`user:${userId}`).emit('premium:activated', data);
+    });
+
+    // Handle profile updates (to refresh all connected clients)
+    socket.on('profile:updated', (data) => {
+      const { userId } = data;
+      io.to(`user:${userId}`).emit('profile:refresh', data);
+    });
+
+    // Handle user likes/matches updates
+    socket.on('user:updated', (data) => {
+      const { userId } = data;
+      // Emit to user's room for real-time updates
+      io.to(`user:${userId}`).emit('user:data-refresh', data);
+    });
+
     // Handle disconnection
     socket.on('disconnect', () => {
       console.log(`❌ User disconnected: ${socket.userId} (${socket.id})`);

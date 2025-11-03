@@ -66,19 +66,43 @@ const getOrCreateChat = async (req, res, next) => {
       });
     }
 
-    // TODO: Re-enable matching requirement check after testing phase
-    // During testing phase, allow chatting without matching
-    // Check if users have matched (can only chat with matches)
-    // const currentUser = await User.findById(currentUserId);
-    // if (!currentUser.matches.includes(userId)) {
-    //   return res.status(403).json({
-    //     status: 'error',
-    //     message: 'You can only chat with users you have matched with'
-    //   });
-    // }
+    // Find existing chat or create new one
+    let chat = await Chat.findOne({
+      participants: { $all: [currentUserId, userId] },
+      isActive: true
+    });
 
-    // Find or create chat
-    const chat = await Chat.findOrCreateChat(currentUserId, userId);
+    if (!chat) {
+      // Create new chat with pending request status
+      chat = await Chat.create({
+        participants: [currentUserId, userId],
+        chatRequest: {
+          requestedBy: currentUserId,
+          requestedAt: new Date(),
+          status: 'pending'
+        }
+      });
+      
+      // Emit chat request notification via Socket.io
+      const { getIO } = require('../utils/socket');
+      const io = getIO();
+      io.to(`user:${userId}`).emit('chat:request', {
+        chatId: chat._id,
+        requestedBy: currentUserId,
+        requesterName: req.user.name,
+        requestedAt: chat.chatRequest.requestedAt
+      });
+    } else {
+      // Check if chat request needs to be handled
+      if (chat.chatRequest && chat.chatRequest.status === 'pending') {
+        // Check if current user is the requester or the recipient
+        const isRequester = chat.chatRequest.requestedBy.toString() === currentUserId.toString();
+        if (!isRequester) {
+          // Current user is recipient - they can view but chat is pending
+          // Allow viewing but messages are blocked until accepted
+        }
+      }
+    }
 
     // Populate participants with user info
     await chat.populate({
@@ -198,6 +222,25 @@ const sendMessage = async (req, res, next) => {
       return res.status(403).json({
         status: 'error',
         message: 'Access denied'
+      });
+    }
+
+    // Check if chat request is pending and user is not the requester
+    if (chat.chatRequest && chat.chatRequest.status === 'pending') {
+      const isRequester = chat.chatRequest.requestedBy.toString() === req.user._id.toString();
+      if (!isRequester) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Chat request is pending. Please wait for the other user to accept your chat request.'
+        });
+      }
+    }
+
+    // Check if chat request was rejected
+    if (chat.chatRequest && chat.chatRequest.status === 'rejected') {
+      return res.status(403).json({
+        status: 'error',
+        message: 'This chat request has been rejected. You cannot send messages.'
       });
     }
 
@@ -609,6 +652,130 @@ const submitQuiz = async (req, res, next) => {
   }
 };
 
+// @desc    Accept chat request
+// @route   POST /api/chat/:chatId/accept
+// @access  Private
+const acceptChatRequest = async (req, res, next) => {
+  try {
+    const { chatId } = req.params;
+    const chat = await Chat.findById(chatId);
+
+    if (!chat) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Chat not found'
+      });
+    }
+
+    // Check if user is participant
+    if (!chat.participants.includes(req.user._id)) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Access denied'
+      });
+    }
+
+    // Check if there's a pending request
+    if (!chat.chatRequest || chat.chatRequest.status !== 'pending') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'No pending chat request'
+      });
+    }
+
+    // Check if current user is the recipient (not the requester)
+    const isRequester = chat.chatRequest.requestedBy.toString() === req.user._id.toString();
+    if (isRequester) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'You cannot accept your own request'
+      });
+    }
+
+    // Accept the chat request
+    chat.chatRequest.status = 'accepted';
+    chat.chatRequest.acceptedAt = new Date();
+    await chat.save();
+
+    // Notify requester via Socket.io
+    const { getIO } = require('../utils/socket');
+    const io = getIO();
+    io.to(`user:${chat.chatRequest.requestedBy}`).emit('chat:accepted', {
+      chatId: chat._id,
+      acceptedBy: req.user._id,
+      acceptedByName: req.user.name
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Chat request accepted',
+      data: {
+        chat
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Reject chat request
+// @route   POST /api/chat/:chatId/reject
+// @access  Private
+const rejectChatRequest = async (req, res, next) => {
+  try {
+    const { chatId } = req.params;
+    const chat = await Chat.findById(chatId);
+
+    if (!chat) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Chat not found'
+      });
+    }
+
+    // Check if user is participant
+    if (!chat.participants.includes(req.user._id)) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Access denied'
+      });
+    }
+
+    // Check if there's a pending request
+    if (!chat.chatRequest || chat.chatRequest.status !== 'pending') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'No pending chat request'
+      });
+    }
+
+    // Reject the chat request
+    chat.chatRequest.status = 'rejected';
+    chat.chatRequest.rejectedAt = new Date();
+    chat.isActive = false; // Deactivate chat on rejection
+    await chat.save();
+
+    // Notify requester via Socket.io
+    const { getIO } = require('../utils/socket');
+    const io = getIO();
+    io.to(`user:${chat.chatRequest.requestedBy}`).emit('chat:rejected', {
+      chatId: chat._id,
+      rejectedBy: req.user._id,
+      rejectedByName: req.user.name
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Chat request rejected',
+      data: {
+        chat
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getUserChats,
   getOrCreateChat,
@@ -619,5 +786,7 @@ module.exports = {
   getUnreadCount,
   getQuizConsent,
   setQuizConsent,
-  submitQuiz
+  submitQuiz,
+  acceptChatRequest,
+  rejectChatRequest
 };

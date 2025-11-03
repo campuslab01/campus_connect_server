@@ -136,6 +136,30 @@ const userSchema = new mongoose.Schema({
   passwordResetToken: String,
   passwordResetExpires: Date,
   
+  // E2EE (End-to-End Encryption) Public Key
+  e2eePublicKey: {
+    type: String,
+    default: null
+  },
+  
+  // Premium Subscription
+  isPremium: {
+    type: Boolean,
+    default: false
+  },
+  premiumExpiresAt: {
+    type: Date,
+    default: null
+  },
+  razorpaySubscriptionId: {
+    type: String,
+    default: null
+  },
+  razorpayCustomerId: {
+    type: String,
+    default: null
+  },
+  
   // Timestamps
   createdAt: {
     type: Date,
