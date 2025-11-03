@@ -115,8 +115,8 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    console.warn(`❌ CORS blocked request from origin: ${origin}`);
-    return callback(new Error('Not allowed by CORS'));
+      console.warn(`❌ CORS blocked request from origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -203,9 +203,16 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 // 404 handler for uploads (catches requests for files that don't exist)
 app.use('/uploads', (req, res) => {
   const origin = req.headers.origin;
-    const corsOrigin = (origin && allowedOrigins.includes(origin)) 
-      ? origin 
-      : (process.env.CLIENT_URL || '*');
+  
+  // Allow all Vercel origins and localhost for images
+  let corsOrigin = '*';
+  if (origin) {
+    if (allowedOrigins.includes(origin) || origin.includes('.vercel.app') || origin.includes('localhost')) {
+      corsOrigin = origin;
+    }
+  } else if (process.env.CLIENT_URL) {
+    corsOrigin = process.env.CLIENT_URL;
+  }
   
   // Set CORS headers even for 404s
   res.header('Access-Control-Allow-Origin', corsOrigin);
