@@ -87,33 +87,8 @@ const allowedOrigins = [
   process.env.GITHUB_PAGES_URL ? `https://${process.env.GITHUB_PAGES_URL}` : null,
 ].filter(Boolean); // Remove null/undefined values
 
-// Handle OPTIONS requests before rate limiting (for CORS preflight)
-app.options('*', cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    if (origin.includes('.vercel.app')) return callback(null, true);
-    if (origin.includes('github.io') && process.env.GITHUB_PAGES_URL) return callback(null, true);
-    return callback(null, true); // Allow OPTIONS for all origins (preflight)
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-}));
-
-// Speed limiting (skip OPTIONS requests)
-app.use((req, res, next) => {
-  if (req.method === 'OPTIONS') return next();
-  return speedLimiter(req, res, next);
-});
-
-// General rate limiting (skip OPTIONS requests)
-app.use((req, res, next) => {
-  if (req.method === 'OPTIONS') return next();
-  return generalLimiter(req, res, next);
-});
-
-app.use(cors({
+// CORS middleware - handles OPTIONS requests automatically
+const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl)
     if (!origin) return callback(null, true);
@@ -141,7 +116,22 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Content-Length', 'Content-Type'],
   optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
-}));
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
+// Speed limiting (skip OPTIONS requests)
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
+  return speedLimiter(req, res, next);
+});
+
+// General rate limiting (skip OPTIONS requests)
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
+  return generalLimiter(req, res, next);
+});
 
 
 // Body parsing middleware
