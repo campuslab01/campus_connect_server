@@ -78,13 +78,7 @@ app.use(requestSizeLimiter('10mb'));
 // Logging middleware
 app.use(logRequest);
 
-// Speed limiting
-app.use(speedLimiter);
-
-// General rate limiting
-app.use(generalLimiter);
-
-// CORS configuration
+// CORS configuration - Define allowed origins first
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
@@ -93,24 +87,60 @@ const allowedOrigins = [
   process.env.GITHUB_PAGES_URL ? `https://${process.env.GITHUB_PAGES_URL}` : null,
 ].filter(Boolean); // Remove null/undefined values
 
-/* app.use(cors({ origin: '*' })); */
+// Handle OPTIONS requests before rate limiting (for CORS preflight)
+app.options('*', cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (origin.includes('.vercel.app')) return callback(null, true);
+    if (origin.includes('github.io') && process.env.GITHUB_PAGES_URL) return callback(null, true);
+    return callback(null, true); // Allow OPTIONS for all origins (preflight)
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+}));
 
+// Speed limiting (skip OPTIONS requests)
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
+  return speedLimiter(req, res, next);
+});
+
+// General rate limiting (skip OPTIONS requests)
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
+  return generalLimiter(req, res, next);
+});
 
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl)
     if (!origin) return callback(null, true);
 
+    // Check if origin is in allowed list
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
-    } else {
-      console.warn(`❌ CORS blocked request from origin: ${origin}`);
-      return callback(new Error('Not allowed by CORS'));
     }
+
+    // Allow all Vercel deployments (for dynamic preview deployments)
+    if (origin.includes('.vercel.app')) {
+      return callback(null, true);
+    }
+
+    // Allow GitHub Pages if configured
+    if (origin.includes('github.io') && process.env.GITHUB_PAGES_URL) {
+      return callback(null, true);
+    }
+
+    console.warn(`❌ CORS blocked request from origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
+  optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
 }));
 
 
@@ -192,17 +222,8 @@ app.use('/uploads', (req, res) => {
   });
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'Campus Connection API is running!',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
-// Health check endpoint (public, no auth required)
+// Health check endpoints (public, no auth required)
+// These should be before API routes to avoid middleware interference
 app.get('/health', healthCheck);
 app.get('/api/health', healthCheck);
 
