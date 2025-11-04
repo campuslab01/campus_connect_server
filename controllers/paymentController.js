@@ -107,10 +107,26 @@ const createOrder = async (req, res, next) => {
       });
     }
 
+    // Generate receipt (max 40 chars for Razorpay)
+    // Format: "prm" + last 12 chars of userId + last 8 digits of timestamp = 23 chars
+    const userIdStr = req.user._id.toString();
+    const timestamp = Date.now().toString();
+    const receipt = `prm${userIdStr.slice(-12)}${timestamp.slice(-8)}`;
+    
+    console.log(`📝 [PAYMENT] Generated receipt: ${receipt} (length: ${receipt.length})`);
+    
+    if (receipt.length > 40) {
+      console.error(`❌ [PAYMENT] Receipt too long: ${receipt.length} characters`);
+      return res.status(400).json({
+        status: 'error',
+        message: 'Receipt generation failed'
+      });
+    }
+
     const options = {
       amount: validAmount,
       currency: currency,
-      receipt: `premium_${req.user._id}_${Date.now()}`,
+      receipt: receipt,
       notes: {
         userId: req.user._id.toString(),
         plan: plan,
