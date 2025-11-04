@@ -13,12 +13,17 @@ const messageSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['text', 'image', 'emoji'],
+    enum: ['text', 'image', 'emoji', 'confession'],
     default: 'text'
   },
   imageUrl: {
     type: String,
     default: ''
+  },
+  confessionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Confession',
+    default: null
   },
   isRead: {
     type: Boolean,
@@ -135,7 +140,14 @@ chatSchema.index({ lastMessageAt: -1 });
 chatSchema.pre('save', function(next) {
   if (this.messages && this.messages.length > 0) {
     const lastMessage = this.messages[this.messages.length - 1];
-    this.lastMessage = lastMessage.content;
+    // Handle different message types for lastMessage preview
+    if (lastMessage.type === 'confession') {
+      this.lastMessage = 'Shared a confession';
+    } else if (lastMessage.type === 'image') {
+      this.lastMessage = 'Sent an image';
+    } else {
+      this.lastMessage = lastMessage.content;
+    }
     this.lastMessageAt = lastMessage.timestamp;
   }
   this.updatedAt = Date.now();
@@ -160,12 +172,13 @@ chatSchema.statics.findOrCreateChat = async function(user1Id, user2Id) {
 };
 
 // Instance method to add message
-chatSchema.methods.addMessage = async function(senderId, content, type = 'text', imageUrl = '') {
+chatSchema.methods.addMessage = async function(senderId, content, type = 'text', imageUrl = '', confessionId = null) {
   const message = {
     sender: senderId,
     content,
     type,
     imageUrl,
+    confessionId,
     timestamp: new Date()
   };
   

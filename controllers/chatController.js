@@ -160,10 +160,20 @@ const getChatMessages = async (req, res, next) => {
       .slice(skip, skip + parseInt(limit))
       .reverse();
 
-    // Populate sender info
+    // Populate sender info and confession data
     await chat.populate({
       path: 'messages.sender',
       select: 'name profileImage'
+    });
+    
+    // Populate confession data for messages with confessionId
+    await chat.populate({
+      path: 'messages.confessionId',
+      select: 'content author isAnonymous likes comments createdAt',
+      populate: {
+        path: 'author',
+        select: 'name profileImage'
+      }
     });
 
     res.status(200).json({
@@ -206,7 +216,7 @@ const sendMessage = async (req, res, next) => {
     }
 
     const { chatId } = req.params;
-    const { content, type = 'text', imageUrl = '' } = req.body;
+    const { content, type = 'text', imageUrl = '', confessionId = null } = req.body;
 
     const chat = await Chat.findById(chatId);
 
@@ -245,7 +255,7 @@ const sendMessage = async (req, res, next) => {
     }
 
     // Add message
-    const message = await chat.addMessage(req.user._id, content, type, imageUrl);
+    const message = await chat.addMessage(req.user._id, content, type, imageUrl, confessionId);
 
     // Repopulate chat to get sender info for messages
     // Can't populate nested docs directly, so populate at chat level
@@ -291,6 +301,8 @@ const sendMessage = async (req, res, next) => {
         id: populatedMessage._id,
         chatId: chatId,
         content: populatedMessage.content,
+        type: populatedMessage.type || 'text',
+        confessionId: populatedMessage.confessionId || null,
         sender: {
           id: req.user._id,
           name: req.user.name
