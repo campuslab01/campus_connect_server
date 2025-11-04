@@ -6,17 +6,29 @@ const { authenticateToken } = require('../middlewares/auth');
 // Initialize Razorpay
 let razorpay;
 try {
+  console.log('🔧 [PAYMENT] Initializing Razorpay...');
+  console.log('   RAZORPAY_KEY_ID:', process.env.RAZORPAY_KEY_ID ? `${process.env.RAZORPAY_KEY_ID.substring(0, 10)}...` : 'NOT SET');
+  console.log('   RAZORPAY_KEY_SECRET:', process.env.RAZORPAY_KEY_SECRET ? 'SET' : 'NOT SET');
+  
   if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
     razorpay = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID,
       key_secret: process.env.RAZORPAY_KEY_SECRET
     });
-    console.log('✅ Razorpay initialized');
+    console.log('✅ [PAYMENT] Razorpay initialized successfully');
   } else {
-    console.warn('⚠️ Razorpay credentials not found - payment features disabled');
+    console.warn('⚠️ [PAYMENT] Razorpay credentials not found - payment features disabled');
+    if (!process.env.RAZORPAY_KEY_ID) {
+      console.warn('   Missing: RAZORPAY_KEY_ID');
+    }
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+      console.warn('   Missing: RAZORPAY_KEY_SECRET');
+    }
   }
 } catch (error) {
-  console.error('❌ Error initializing Razorpay:', error);
+  console.error('❌ [PAYMENT] Error initializing Razorpay:');
+  console.error('   Error message:', error.message);
+  console.error('   Error stack:', error.stack);
 }
 
 /**
@@ -26,25 +38,44 @@ try {
  */
 const createOrder = async (req, res, next) => {
   try {
+    console.log('💳 [PAYMENT] Creating order request received');
+    console.log('   User ID:', req.user?._id || 'NOT SET');
+    console.log('   Request body:', { 
+      amount: req.body.amount || 'NOT SET',
+      currency: req.body.currency || 'NOT SET',
+      plan: req.body.plan || 'NOT SET'
+    });
+
+    // Check Razorpay initialization
     if (!razorpay) {
+      console.error('❌ [PAYMENT] Razorpay not initialized');
+      console.error('   RAZORPAY_KEY_ID:', process.env.RAZORPAY_KEY_ID ? 'SET' : 'NOT SET');
+      console.error('   RAZORPAY_KEY_SECRET:', process.env.RAZORPAY_KEY_SECRET ? 'SET' : 'NOT SET');
       return res.status(503).json({
         status: 'error',
         message: 'Payment service is not available'
       });
     }
 
+    console.log('✅ [PAYMENT] Razorpay initialized successfully');
+
     const { amount, currency = 'INR', plan = 'monthly' } = req.body;
+    
+    console.log(`📋 [PAYMENT] Processing plan: ${plan}, currency: ${currency}`);
     
     // Validate amount (premium plans: 99/month, 299/3months, 499/6months)
     const planAmounts = {
       monthly: 9900, // ₹99 in paise
-      quarterly: 8900, // ₹89/month for 3 months (26700 total)
-      semiannual: 7900 // ₹79/month for 6 months (47400 total)
+      quarterly: 26700, // ₹267 total for 3 months (₹89/month)
+      semiannual: 47400 // ₹474 total for 6 months (₹79/month)
     };
     
     const validAmount = planAmounts[plan] || amount;
     
+    console.log(`💰 [PAYMENT] Calculated amount: ${validAmount} paise (₹${validAmount / 100})`);
+    
     if (!validAmount || validAmount < 100) {
+      console.error(`❌ [PAYMENT] Invalid amount: ${validAmount}`);
       return res.status(400).json({
         status: 'error',
         message: 'Invalid amount'
@@ -62,7 +93,21 @@ const createOrder = async (req, res, next) => {
       }
     };
 
+    console.log(`🔄 [PAYMENT] Creating Razorpay order with options:`, {
+      amount: options.amount,
+      currency: options.currency,
+      receipt: options.receipt,
+      plan: options.notes.plan
+    });
+
     const order = await razorpay.orders.create(options);
+
+    console.log(`✅ [PAYMENT] Order created successfully:`, {
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      status: order.status
+    });
 
     res.status(200).json({
       status: 'success',
@@ -74,7 +119,13 @@ const createOrder = async (req, res, next) => {
       }
     });
   } catch (error) {
-    console.error('Error creating Razorpay order:', error);
+    console.error('❌ [PAYMENT] Error creating Razorpay order:');
+    console.error('   Error message:', error.message);
+    console.error('   Error code:', error.code);
+    console.error('   Error stack:', error.stack);
+    if (error.error) {
+      console.error('   Razorpay error:', error.error);
+    }
     next(error);
   }
 };
@@ -86,9 +137,19 @@ const createOrder = async (req, res, next) => {
  */
 const verifyPayment = async (req, res, next) => {
   try {
+    console.log('🔍 [PAYMENT] Verifying payment request received');
+    console.log('   User ID:', req.user?._id || 'NOT SET');
+    console.log('   Request body:', {
+      orderId: req.body.orderId ? `${req.body.orderId.substring(0, 20)}...` : 'NOT SET',
+      paymentId: req.body.paymentId ? `${req.body.paymentId.substring(0, 20)}...` : 'NOT SET',
+      signature: req.body.signature ? 'SET' : 'NOT SET',
+      plan: req.body.plan || 'NOT SET'
+    });
+
     const { orderId, paymentId, signature, plan = 'monthly' } = req.body;
 
     if (!orderId || !paymentId || !signature) {
+      console.error('❌ [PAYMENT] Missing payment details');
       return res.status(400).json({
         status: 'error',
         message: 'Missing payment details'
@@ -102,17 +163,33 @@ const verifyPayment = async (req, res, next) => {
       .update(text)
       .digest('hex');
 
+    console.log(`🔐 [PAYMENT] Verifying signature...`);
+    console.log(`   Generated: ${generatedSignature.substring(0, 20)}...`);
+    console.log(`   Received: ${signature.substring(0, 20)}...`);
+
     if (generatedSignature !== signature) {
+      console.error('❌ [PAYMENT] Signature verification failed');
       return res.status(400).json({
         status: 'error',
         message: 'Payment verification failed'
       });
     }
 
+    console.log('✅ [PAYMENT] Signature verified successfully');
+
     // Get payment details from Razorpay
+    console.log(`📥 [PAYMENT] Fetching payment details from Razorpay...`);
     const payment = await razorpay.payments.fetch(paymentId);
 
+    console.log(`📊 [PAYMENT] Payment details:`, {
+      paymentId: payment.id,
+      status: payment.status,
+      amount: payment.amount,
+      currency: payment.currency
+    });
+
     if (payment.status !== 'authorized' && payment.status !== 'captured') {
+      console.error(`❌ [PAYMENT] Payment not successful. Status: ${payment.status}`);
       return res.status(400).json({
         status: 'error',
         message: 'Payment not successful'
@@ -130,7 +207,10 @@ const verifyPayment = async (req, res, next) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + days);
 
+    console.log(`⏰ [PAYMENT] Premium expires at: ${expiresAt.toISOString()}`);
+
     // Update user premium status
+    console.log(`💾 [PAYMENT] Updating user premium status...`);
     const user = await User.findByIdAndUpdate(
       req.user._id,
       {
@@ -142,13 +222,24 @@ const verifyPayment = async (req, res, next) => {
       { new: true }
     );
 
-    // Emit premium activation event via Socket.io
-    const { getIO } = require('../utils/socket');
-    const io = getIO();
-    io.to(`user:${req.user._id}`).emit('premium:activated', {
-      expiresAt: expiresAt,
-      plan: plan
+    console.log(`✅ [PAYMENT] User premium status updated:`, {
+      userId: user._id,
+      isPremium: user.isPremium,
+      premiumExpiresAt: user.premiumExpiresAt
     });
+
+    // Emit premium activation event via Socket.io
+    try {
+      const { getIO } = require('../utils/socket');
+      const io = getIO();
+      io.to(`user:${req.user._id}`).emit('premium:activated', {
+        expiresAt: expiresAt,
+        plan: plan
+      });
+      console.log(`📡 [PAYMENT] Premium activation event emitted`);
+    } catch (socketError) {
+      console.warn('⚠️ [PAYMENT] Failed to emit socket event:', socketError.message);
+    }
 
     res.status(200).json({
       status: 'success',
@@ -160,7 +251,13 @@ const verifyPayment = async (req, res, next) => {
       }
     });
   } catch (error) {
-    console.error('Error verifying payment:', error);
+    console.error('❌ [PAYMENT] Error verifying payment:');
+    console.error('   Error message:', error.message);
+    console.error('   Error code:', error.code);
+    console.error('   Error stack:', error.stack);
+    if (error.error) {
+      console.error('   Razorpay error:', error.error);
+    }
     next(error);
   }
 };

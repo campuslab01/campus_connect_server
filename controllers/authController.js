@@ -338,11 +338,24 @@ const changePassword = async (req, res, next) => {
 // @access  Public
 const forgotPassword = async (req, res, next) => {
   try {
+    console.log('🔐 [FORGOT PASSWORD] Request received');
+    console.log('   Request body:', { email: req.body.email ? '***provided***' : 'missing' });
+    
     const { email } = req.body;
 
+    if (!email) {
+      console.error('❌ [FORGOT PASSWORD] Email is missing from request body');
+      return res.status(400).json({
+        status: 'error',
+        message: 'Email is required'
+      });
+    }
+
+    console.log(`📧 [FORGOT PASSWORD] Looking up user with email: ${email}`);
     const user = await User.findOne({ email });
     
     if (!user) {
+      console.log(`⚠️ [FORGOT PASSWORD] No user found with email: ${email}`);
       // Don't reveal if user exists or not for security
       return res.status(200).json({
         status: 'success',
@@ -350,8 +363,11 @@ const forgotPassword = async (req, res, next) => {
       });
     }
 
+    console.log(`✅ [FORGOT PASSWORD] User found: ${user._id}, ${user.name}`);
+
     // Generate reset token
     const resetToken = crypto.randomBytes(20).toString('hex');
+    console.log(`🔑 [FORGOT PASSWORD] Generated reset token (first 10 chars): ${resetToken.substring(0, 10)}...`);
     
     // Hash token and set to resetPasswordToken field
     user.passwordResetToken = crypto
@@ -361,36 +377,67 @@ const forgotPassword = async (req, res, next) => {
     
     // Set expire time (10 minutes)
     user.passwordResetExpires = Date.now() + 10 * 60 * 1000;
+    console.log(`⏰ [FORGOT PASSWORD] Token expires at: ${new Date(user.passwordResetExpires).toISOString()}`);
     
     await user.save();
+    console.log(`💾 [FORGOT PASSWORD] User saved with reset token`);
 
     // Send password reset email
     setImmediate(async () => {
       try {
-        const { Email, emailTemplates } = require('../utils/emailService');
+        console.log(`📬 [FORGOT PASSWORD] Starting email send process...`);
+        const { Email, emailTemplates, initializeEmailService } = require('../utils/emailService');
+        
+        // Ensure email service is initialized
+        console.log(`🔧 [FORGOT PASSWORD] Initializing email service...`);
+        const transporter = initializeEmailService();
+        
+        if (!transporter) {
+          console.error('❌ [FORGOT PASSWORD] Email service not initialized - checking env vars');
+          console.error('   SMTP_HOST:', process.env.SMTP_HOST || 'NOT SET');
+          console.error('   SMTP_PORT:', process.env.SMTP_PORT || 'NOT SET');
+          console.error('   SMTP_USER:', process.env.SMTP_USER ? 'SET' : 'NOT SET');
+          console.error('   SMTP_PASS:', process.env.SMTP_PASS ? 'SET' : 'NOT SET');
+          console.error('   SMTP_FROM:', process.env.SMTP_FROM || 'NOT SET');
+          return;
+        }
+
         const clientUrl = process.env.CLIENT_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5173');
         // Remove trailing slash if present
         const cleanClientUrl = clientUrl.replace(/\/$/, '');
         const resetLink = `${cleanClientUrl}/reset-password?token=${resetToken}&userId=${user._id}`;
         
-        console.log(`📧 Attempting to send password reset email to: ${user.email}`);
+        console.log(`📧 [FORGOT PASSWORD] Attempting to send password reset email:`);
+        console.log(`   To: ${user.email}`);
+        console.log(`   From: ${process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@campusconnection.com'}`);
         console.log(`   Reset link: ${resetLink}`);
+        console.log(`   Client URL: ${cleanClientUrl}`);
         
-        await Email.create()
+        const emailResult = await Email.create()
           .to(user.email)
           .subject('Reset Your Password - Campus Connection')
           .html(emailTemplates.passwordResetEmail(user.name, resetLink))
           .send();
         
-        console.log(`✅ Password reset email sent successfully to: ${user.email}`);
+        console.log(`✅ [FORGOT PASSWORD] Password reset email sent successfully!`);
+        console.log(`   Message ID: ${emailResult.messageId || 'N/A'}`);
+        console.log(`   Accepted: ${emailResult.accepted?.join(', ') || 'N/A'}`);
+        console.log(`   Rejected: ${emailResult.rejected?.join(', ') || 'N/A'}`);
       } catch (emailError) {
         // Log detailed error for debugging
-        console.error('❌ Error sending password reset email:');
+        console.error('❌ [FORGOT PASSWORD] Error sending password reset email:');
         console.error('   User email:', user.email);
         console.error('   Error message:', emailError.message);
         console.error('   Error code:', emailError.code);
+        console.error('   Error stack:', emailError.stack);
         if (emailError.response) {
           console.error('   SMTP response:', emailError.response);
+        }
+        if (emailError.responseCode) {
+          console.error('   Response code:', emailError.responseCode);
+        }
+        if (emailError.command) {
+          console.error('   Command:', emailError.command);
         }
         // Don't fail the request if email fails - security best practice
       }
@@ -401,6 +448,9 @@ const forgotPassword = async (req, res, next) => {
       message: 'If an account with that email exists, a password reset link has been sent.'
     });
   } catch (error) {
+    console.error('❌ [FORGOT PASSWORD] Unexpected error:', error);
+    console.error('   Error message:', error.message);
+    console.error('   Error stack:', error.stack);
     next(error);
   }
 };
