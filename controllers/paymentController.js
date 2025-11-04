@@ -40,11 +40,21 @@ const createOrder = async (req, res, next) => {
   try {
     console.log('💳 [PAYMENT] Creating order request received');
     console.log('   User ID:', req.user?._id || 'NOT SET');
+    console.log('   User authenticated:', !!req.user);
     console.log('   Request body:', { 
       amount: req.body.amount || 'NOT SET',
       currency: req.body.currency || 'NOT SET',
       plan: req.body.plan || 'NOT SET'
     });
+
+    // Check if user is authenticated
+    if (!req.user || !req.user._id) {
+      console.error('❌ [PAYMENT] User not authenticated');
+      return res.status(401).json({
+        status: 'error',
+        message: 'Authentication required'
+      });
+    }
 
     // Check Razorpay initialization
     if (!razorpay) {
@@ -61,24 +71,39 @@ const createOrder = async (req, res, next) => {
 
     const { amount, currency = 'INR', plan = 'monthly' } = req.body;
     
-    console.log(`📋 [PAYMENT] Processing plan: ${plan}, currency: ${currency}`);
+    console.log(`📋 [PAYMENT] Processing plan: ${plan}, currency: ${currency}, amount: ${amount || 'NOT PROVIDED'}`);
     
-    // Validate amount (premium plans: 99/month, 299/3months, 499/6months)
+    // Validate plan and amount (premium plans: 99/month, 267/3months, 474/6months)
     const planAmounts = {
       monthly: 9900, // ₹99 in paise
       quarterly: 26700, // ₹267 total for 3 months (₹89/month)
       semiannual: 47400 // ₹474 total for 6 months (₹79/month)
     };
     
+    // Validate plan
+    if (!plan || !planAmounts.hasOwnProperty(plan)) {
+      console.error(`❌ [PAYMENT] Invalid plan: ${plan}`);
+      console.error(`   Valid plans are: ${Object.keys(planAmounts).join(', ')}`);
+      return res.status(400).json({
+        status: 'error',
+        message: `Invalid plan. Valid plans are: ${Object.keys(planAmounts).join(', ')}`,
+        validPlans: Object.keys(planAmounts)
+      });
+    }
+    
+    // Get amount from plan or use provided amount
     const validAmount = planAmounts[plan] || amount;
     
     console.log(`💰 [PAYMENT] Calculated amount: ${validAmount} paise (₹${validAmount / 100})`);
     
     if (!validAmount || validAmount < 100) {
       console.error(`❌ [PAYMENT] Invalid amount: ${validAmount}`);
+      console.error(`   Plan: ${plan}, Plan amount: ${planAmounts[plan]}, Provided amount: ${amount}`);
       return res.status(400).json({
         status: 'error',
-        message: 'Invalid amount'
+        message: `Invalid amount: ${validAmount}. Minimum amount is 100 paise (₹1)`,
+        plan: plan,
+        expectedAmount: planAmounts[plan]
       });
     }
 
@@ -100,14 +125,27 @@ const createOrder = async (req, res, next) => {
       plan: options.notes.plan
     });
 
-    const order = await razorpay.orders.create(options);
-
-    console.log(`✅ [PAYMENT] Order created successfully:`, {
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      status: order.status
-    });
+    let order;
+    try {
+      order = await razorpay.orders.create(options);
+      console.log(`✅ [PAYMENT] Razorpay order created successfully:`, {
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        status: order.status
+      });
+    } catch (razorpayError) {
+      console.error('❌ [PAYMENT] Razorpay API error:');
+      console.error('   Error:', razorpayError);
+      if (razorpayError.error) {
+        console.error('   Razorpay error details:', razorpayError.error);
+      }
+      return res.status(400).json({
+        status: 'error',
+        message: razorpayError.error?.description || razorpayError.message || 'Failed to create payment order',
+        error: razorpayError.error || razorpayError.message
+      });
+    }
 
     res.status(200).json({
       status: 'success',
