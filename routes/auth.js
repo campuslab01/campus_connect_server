@@ -8,6 +8,11 @@ const {
   forgotPassword,
   verifyEmail,
   resetPassword,
+  // OTP-based password reset
+  requestPasswordOtp,
+  verifyPasswordOtp,
+  updatePasswordWithOtp,
+  resendPasswordOtp,
   logout
 } = require('../controllers/authController');
 const { authenticateToken } = require('../middlewares/auth');
@@ -17,8 +22,13 @@ const {
   validateProfileUpdate,
   validatePasswordChange,
   validateForgotPassword,
-  validateResetPassword
+  validateResetPassword,
+  validateRequestPasswordOtp,
+  validateVerifyPasswordOtp,
+  validateUpdatePasswordWithOtp,
+  validateResendPasswordOtp
 } = require('../middlewares/validation');
+const { passwordResetLimiter } = require('../middlewares/security');
 
 const router = express.Router();
 
@@ -61,6 +71,16 @@ router.get('/verify-email', verifyEmail);
 // @desc    Reset password with token
 // @access  Public
 router.put('/reset-password/:token', validateResetPassword, resetPassword);
+
+// --- OTP-based Password Reset ---
+// Request OTP
+router.post('/request-password-otp', passwordResetLimiter, validateRequestPasswordOtp, requestPasswordOtp);
+// Verify OTP
+router.post('/verify-password-otp', passwordResetLimiter, validateVerifyPasswordOtp, verifyPasswordOtp);
+// Update password with OTP
+router.put('/update-password-with-otp', passwordResetLimiter, validateUpdatePasswordWithOtp, updatePasswordWithOtp);
+// Resend OTP
+router.post('/resend-password-otp', passwordResetLimiter, validateResendPasswordOtp, resendPasswordOtp);
 
 // @route   POST /api/auth/logout
 // @desc    Logout user
