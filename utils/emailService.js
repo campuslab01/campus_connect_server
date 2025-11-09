@@ -33,6 +33,12 @@ const initializeEmailService = () => {
     }
   };
 
+  // Determine the 'from' address. For Gmail, it MUST match the authenticated user.
+  const fromAddress = (emailConfig.host === 'smtp.gmail.com')
+    ? smtpUser
+    : (process.env.SMTP_FROM || smtpUser);
+
+
   // Log configuration (without password)
   console.log('📧 Email Service Configuration:');
   console.log('   Host:', emailConfig.host);
@@ -40,7 +46,7 @@ const initializeEmailService = () => {
   console.log('   Secure:', emailConfig.secure);
   console.log('   User:', emailConfig.auth.user || 'NOT SET');
   console.log('   Password:', emailConfig.auth.pass ? '***SET***' : 'NOT SET');
-  console.log('   From:', process.env.SMTP_FROM || emailConfig.auth.user || 'NOT SET');
+  console.log('   From:', fromAddress || 'NOT SET');
 
   // If credentials are not provided, create a test account (development only)
   if (!emailConfig.auth.user || !emailConfig.auth.pass) {
@@ -56,7 +62,12 @@ const initializeEmailService = () => {
   }
 
   try {
-    transporter = nodemailer.createTransport(emailConfig);
+    transporter = nodemailer.createTransport({
+      ...emailConfig,
+      defaults: {
+        from: fromAddress,
+      }
+    });
     
     // Verify connection
     transporter.verify((error, success) => {
