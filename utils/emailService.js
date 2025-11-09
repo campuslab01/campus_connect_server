@@ -1,93 +1,41 @@
-let nodemailer = null;
-try {
-  nodemailer = require('nodemailer');
-} catch (e) {
-  console.warn('⚠️ Nodemailer not installed; email sending will be disabled in this environment');
-}
+const formData = require('form-data');
+const Mailgun = require('mailgun.js');
+
+let mg;
+let mailgunDomain;
 
 /**
- * Email Service using Nodemailer
- * Provides a fluent-like API for sending emails
- */
-
-let transporter = null;
-
-/**
- * Initialize email transporter
+ * Initialize Mailgun client
  */
 const initializeEmailService = () => {
-  if (transporter) return transporter;
+  if (mg) return;
 
-  // Get email configuration from environment variables
-  // Remove quotes from password if present (common issue with Render env vars)
-  const smtpPass = process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/^["']|["']$/g, '') : null;
-  const smtpUser = process.env.SMTP_USER ? process.env.SMTP_USER.replace(/^["']|["']$/g, '') : null;
-  
-  const emailConfig = {
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
-    auth: {
-      user: smtpUser,
-      pass: smtpPass
-    }
-  };
+  mailgunDomain = process.env.MAILGUN_DOMAIN;
+  const mailgunApiKey = process.env.MAILGUN_API_KEY;
 
-  // Determine the 'from' address. For Gmail, it MUST match the authenticated user.
-  const fromAddress = (emailConfig.host === 'smtp.gmail.com')
-    ? smtpUser
-    : (process.env.SMTP_FROM || smtpUser);
+  console.log('📧 Email Service Configuration (Mailgun):');
+  console.log('   Domain:', mailgunDomain || 'NOT SET');
+  console.log('   API Key:', mailgunApiKey ? '***SET***' : 'NOT SET');
 
-
-  // Log configuration (without password)
-  console.log('📧 Email Service Configuration:');
-  console.log('   Host:', emailConfig.host);
-  console.log('   Port:', emailConfig.port);
-  console.log('   Secure:', emailConfig.secure);
-  console.log('   User:', emailConfig.auth.user || 'NOT SET');
-  console.log('   Password:', emailConfig.auth.pass ? '***SET***' : 'NOT SET');
-  console.log('   From:', fromAddress || 'NOT SET');
-
-  // If credentials are not provided, create a test account (development only)
-  if (!emailConfig.auth.user || !emailConfig.auth.pass) {
+  if (!mailgunApiKey || !mailgunDomain) {
     if (process.env.NODE_ENV === 'production') {
-      console.error('❌ SMTP credentials not configured - emails will not be sent');
-      console.error('   SMTP_USER:', emailConfig.auth.user ? 'SET' : 'MISSING');
-      console.error('   SMTP_PASS:', emailConfig.auth.pass ? 'SET' : 'MISSING');
-      return null;
+      console.error('❌ Mailgun credentials not configured - emails will not be sent');
+    } else {
+      console.warn('⚠️ Mailgun not configured. Email sending will be logged instead of sent.');
     }
-    // For development, use ethereal.email test account
-    console.warn('⚠️ Using test email service (ethereal.email) - emails won\'t actually be sent');
-    return null; // Will be created on-demand for development
+    return;
   }
 
   try {
-    transporter = nodemailer.createTransport({
-      ...emailConfig,
-      defaults: {
-        from: fromAddress,
-      }
+    const mailgun = new Mailgun(formData);
+    mg = mailgun.client({
+      username: 'api',
+      key: mailgunApiKey,
     });
-    
-    // Verify connection
-    transporter.verify((error, success) => {
-      if (error) {
-        console.error('❌ Email service verification failed:', error.message);
-        console.error('   Error code:', error.code);
-        console.error('   Error command:', error.command);
-        if (error.response) {
-          console.error('   SMTP response:', error.response);
-        }
-      } else {
-        console.log('✅ Email service initialized and verified successfully');
-      }
-    });
-    
-    return transporter;
+    console.log('✅ Mailgun client initialized successfully.');
   } catch (error) {
-    console.error('❌ Error initializing email service:', error.message);
-    console.error('   Full error:', error);
-    return null;
+    console.error('❌ Error initializing Mailgun client:', error.message);
+    mg = null;
   }
 };
 
@@ -96,9 +44,7 @@ const initializeEmailService = () => {
  */
 class EmailBuilder {
   constructor() {
-    this.mailOptions = {
-      from: process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@campusconnection.com',
-    };
+    this.mailOptions = {};
   }
 
   from(email) {
@@ -127,46 +73,40 @@ class EmailBuilder {
   }
 
   /**
-   * Send the email
+   * Send the email via Mailgun
    */
   async send() {
-    if (!transporter) {
-      transporter = initializeEmailService();
+    // If Mailgun is not configured, log instead of sending
+    if (!mg) {
+      console.log('📧 [Email would be sent via Mailgun]', this.mailOptions);
+      return { id: '<test-message-id@mailgun>', message: 'Queued. Thank you.' };
     }
 
-    if (!transporter) {
-      // In development/test mode, log the email instead of sending
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('📧 [Email would be sent]', this.mailOptions);
-        return { accepted: [this.mailOptions.to], messageId: 'test-message-id' };
-      }
-      throw new Error('Email service not initialized');
+    // Set default from address if not already set
+    if (!this.mailOptions.from) {
+      this.mailOptions.from = `Campus Connection <noreply@${mailgunDomain}>`;
     }
 
     try {
-      // Verify transporter is ready
-      if (!transporter) {
-        throw new Error('Email transporter not initialized');
-      }
+      console.log('🚀 Sending email via Mailgun...');
+      const msg = await mg.messages.create(mailgunDomain, this.mailOptions);
 
-      const info = await transporter.sendMail(this.mailOptions);
-      console.log('✅ Email sent successfully');
-      console.log('   Message ID:', info.messageId);
+      console.log('✅ Email sent successfully via Mailgun');
+      console.log('   Message ID:', msg.id);
       console.log('   To:', this.mailOptions.to);
       console.log('   Subject:', this.mailOptions.subject);
-      return info;
+      return msg;
     } catch (error) {
-      console.error('❌ Error sending email:');
+      console.error('❌ Error sending email via Mailgun:');
       console.error('   Error message:', error.message);
-      console.error('   Error code:', error.code);
+      if (error.details) {
+        console.error('   Error details:', error.details);
+      }
+      if (error.status) {
+        console.error('   Status code:', error.status);
+      }
       console.error('   To:', this.mailOptions.to);
       console.error('   Subject:', this.mailOptions.subject);
-      if (error.response) {
-        console.error('   SMTP Response:', error.response);
-      }
-      if (error.responseCode) {
-        console.error('   Response Code:', error.responseCode);
-      }
       throw error;
     }
   }
