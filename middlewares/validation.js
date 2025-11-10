@@ -312,8 +312,12 @@ const validateMessage = [
   
   body('type')
     .optional()
-    .isIn(['text', 'image', 'emoji'])
-    .withMessage('Invalid message type')
+    .isIn(['text', 'image', 'emoji', 'confession'])
+    .withMessage('Invalid message type'),
+  body('confessionId')
+    .optional()
+    .isString()
+    .withMessage('Invalid confessionId')
 ];
 
 // Confession validation
