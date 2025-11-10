@@ -223,15 +223,10 @@ const validateVerifyPasswordOtp = [
 ];
 
 const validateUpdatePasswordWithOtp = [
-  body('email')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Please provide a valid email'),
-  body('otp')
-    .isLength({ min: 6, max: 6 })
-    .withMessage('OTP must be 6 digits')
-    .isNumeric()
-    .withMessage('OTP must be numeric'),
+  body('otpSessionId')
+    .isString()
+    .isLength({ min: 16, max: 128 })
+    .withMessage('Invalid verification session'),
   body('newPassword')
     .isLength({ min: 8 })
     .withMessage('New password must be at least 8 characters long')

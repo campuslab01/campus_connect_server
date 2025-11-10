@@ -654,7 +654,21 @@ const verifyPasswordOtp = async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: msg });
     }
 
-    return res.status(200).json({ status: 'success', message: 'OTP verified' });
+    // Issue short-lived session for password change to avoid re-sending OTP
+    const sessionId = crypto.randomBytes(24).toString('hex');
+    const now = new Date();
+    // Session valid up to remaining OTP time or 10 minutes, whichever is sooner
+    const sessionExpiresAt = new Date(Math.min(otpRecord.expiresAt.getTime(), now.getTime() + 10 * 60 * 1000));
+
+    otpRecord.sessionId = sessionId;
+    otpRecord.sessionExpiresAt = sessionExpiresAt;
+    await otpRecord.save();
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'OTP verified',
+      data: { otpSessionId: sessionId }
+    });
   } catch (error) {
     next(error);
   }
@@ -665,33 +679,27 @@ const verifyPasswordOtp = async (req, res, next) => {
 // @access  Public
 const updatePasswordWithOtp = async (req, res, next) => {
   try {
-    const { email, otp, newPassword } = req.body;
+    const { otpSessionId, newPassword } = req.body;
 
-    if (!email || !otp || !newPassword) {
-      return res.status(400).json({ status: 'error', message: 'Email, OTP and newPassword are required' });
+    if (!otpSessionId || !newPassword) {
+      return res.status(400).json({ status: 'error', message: 'otpSessionId and newPassword are required' });
     }
 
-    const user = await User.findOne({ email }).select('+password');
+    // Validate session
+    const otpRecord = await PasswordResetOtp.findOne({ sessionId: otpSessionId, isUsed: false });
+    if (!otpRecord || !otpRecord.sessionExpiresAt || otpRecord.sessionExpiresAt < new Date()) {
+      return res.status(400).json({ status: 'error', message: 'Invalid or expired verification session' });
+    }
+
+    const user = await User.findOne({ email: otpRecord.email }).select('+password');
     if (!user) {
       return res.status(400).json({ status: 'error', message: 'Invalid request' });
     }
 
-    const otpRecord = await PasswordResetOtp.findOne({ email, isUsed: false });
-    if (!otpRecord || otpRecord.expiresAt < new Date()) {
-      return res.status(400).json({ status: 'error', message: 'Invalid or expired OTP' });
-    }
-
-    const providedHash = crypto.createHash('sha256').update(otp).digest('hex');
-    if (providedHash !== otpRecord.otpHash) {
-      otpRecord.attempts += 1;
-      await otpRecord.save();
-      const remaining = Math.max(0, 5 - otpRecord.attempts);
-      const msg = remaining > 0 ? `Incorrect OTP. ${remaining} attempts left.` : 'Incorrect OTP.';
-      return res.status(400).json({ status: 'error', message: msg });
-    }
-
-    // Invalidate OTP
+    // Invalidate session and OTP
     otpRecord.isUsed = true;
+    otpRecord.sessionId = null;
+    otpRecord.sessionExpiresAt = null;
     await otpRecord.save();
 
     // Set new password
