@@ -16,8 +16,65 @@ const initializeFirebaseAdmin = () => {
     // });
 
     // Option 2: Use environment variables (recommended for production)
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_SERVICE_ACCOUNT_KEY_BASE64) {
+      const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_SERVICE_ACCOUNT_KEY_BASE64;
+      let serviceAccount = null;
+
+      // Try parsing as JSON first
+      const tryParseJson = (str) => {
+        try {
+          return JSON.parse(str);
+        } catch (e) {
+          return null;
+        }
+      };
+
+      // Clean potential wrapping backticks or quotes
+      const cleaned = typeof raw === 'string' ? raw.trim().replace(/^`|`$/g, '').replace(/^"|"$/g, '').replace(/^'|'$/g, '') : raw;
+
+      // First attempt: direct JSON
+      serviceAccount = tryParseJson(cleaned);
+
+      // Fallback: handle JSON that was string-escaped (e.g., \\n and \\") throughout
+      if (!serviceAccount && typeof cleaned === 'string') {
+        const unescaped = cleaned
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\"/g, '"');
+        serviceAccount = tryParseJson(unescaped);
+      }
+
+      // If JSON parsing failed, try base64 decode then parse
+      if (!serviceAccount) {
+        try {
+          const decoded = Buffer.from(cleaned, 'base64').toString('utf8');
+          // Try direct parse on decoded
+          serviceAccount = tryParseJson(decoded);
+          // Fallback: unescape decoded if it is string-escaped JSON
+          if (!serviceAccount && typeof decoded === 'string') {
+            const decodedUnescaped = decoded
+              .replace(/\\n/g, '\n')
+              .replace(/\\r/g, '\r')
+              .replace(/\\"/g, '"');
+            serviceAccount = tryParseJson(decodedUnescaped);
+          }
+        } catch (e) {
+          // ignore, will log below
+        }
+      }
+
+      if (!serviceAccount) {
+        console.error('Error initializing Firebase Admin: Unable to parse FIREBASE_SERVICE_ACCOUNT_KEY.');
+        console.error('Make sure the env contains valid JSON or base64-encoded JSON.');
+        console.error('Tip: If using JSON in env, escape newlines in private_key as \\n.');
+        throw new Error('Invalid FIREBASE_SERVICE_ACCOUNT_KEY format');
+      }
+
+      // Fix private_key newlines if they are escaped
+      if (serviceAccount.private_key && typeof serviceAccount.private_key === 'string') {
+        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+      }
+
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
       });
