@@ -31,6 +31,7 @@ const uploadRoutes = require('./routes/upload');
 const chatRoutes = require('./routes/chat');
 const confessionRoutes = require('./routes/confession');
 const notificationRoutes = require('./routes/notifications');
+const { notifyTest } = require('./controllers/notificationController');
 const e2eeRoutes = require('./routes/e2ee');
 const paymentRoutes = require('./routes/payments');
 const { healthCheck } = require('./routes/health');
@@ -238,6 +239,8 @@ app.use('/api/upload', authenticateToken, uploadLimiter, uploadRoutes);
 app.use('/api/chat', authenticateToken, chatRoutes);
 app.use('/api/confessions', authenticateToken, confessionRoutes);
 app.use('/api/notifications', authenticateToken, notificationRoutes);
+// Manual test endpoint to trigger a notification for the authenticated user
+app.post('/api/notify/test', authenticateToken, notifyTest);
 app.use('/api/e2ee', e2eeRoutes);
 app.use('/api/payments', paymentRoutes);
 

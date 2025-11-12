@@ -269,5 +269,57 @@ const sendNotification = async (req, res, next) => {
 module.exports = {
   saveToken,
   removeToken,
-  sendNotification
+  sendNotification,
+  /**
+   * Manual test endpoint to send a notification to the authenticated user
+   * @route POST /api/notify/test
+   */
+  notifyTest: async (req, res, next) => {
+    try {
+      if (!firebaseAdminInitialized) {
+        return res.status(503).json({
+          status: 'error',
+          message: 'Firebase Admin not initialized'
+        });
+      }
+
+      const userId = req.user._id;
+
+      // Gather user's active tokens
+      const tokens = await NotificationToken.find({ user: userId, isActive: true }).select('token');
+      if (tokens.length === 0) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'No active FCM tokens found for user'
+        });
+      }
+
+      const fcmTokens = tokens.map(t => t.token);
+      const message = {
+        notification: {
+          title: 'Test Notification ✅',
+          body: 'This is a manual test from /api/notify/test'
+        },
+        data: {
+          type: 'test',
+          timestamp: new Date().toISOString()
+        },
+        tokens: fcmTokens
+      };
+
+      const response = await admin.messaging().sendEachForMulticast(message);
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Test notification sent',
+        data: {
+          successCount: response.successCount,
+          failureCount: response.failureCount,
+          responses: response.responses
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 };

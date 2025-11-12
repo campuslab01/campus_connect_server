@@ -92,6 +92,23 @@ const getOrCreateChat = async (req, res, next) => {
         requesterName: req.user.name,
         requestedAt: chat.chatRequest.requestedAt
       });
+
+      // Send FCM push notification for chat request (async)
+      setImmediate(async () => {
+        try {
+          const { sendChatRequestNotification } = require('../utils/pushNotification');
+          const User = require('../models/User');
+          const requester = await User.findById(currentUserId).select('name profileImage');
+          await sendChatRequestNotification(userId.toString(), {
+            chatId: chat._id.toString(),
+            requesterId: currentUserId.toString(),
+            requesterName: requester?.name,
+            requesterAvatar: requester?.profileImage
+          });
+        } catch (notificationError) {
+          console.error('Error sending chat request push notification:', notificationError);
+        }
+      });
     } else {
       // Check if chat request needs to be handled
       if (chat.chatRequest && chat.chatRequest.status === 'pending') {

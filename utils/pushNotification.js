@@ -172,5 +172,21 @@ module.exports = {
   sendMatchNotification,
   sendLikeNotification,
   sendConfessionNotification,
-  sendWelcomeNotification
+  sendWelcomeNotification,
+  /**
+   * Send notification for new chat request
+   */
+  sendChatRequestNotification: async (userId, requestData) => {
+    return sendPushNotification(userId, {
+      title: 'New chat request 💬',
+      body: `${requestData.requesterName || 'Someone'} wants to chat with you`,
+      image: requestData.requesterAvatar,
+      data: {
+        type: 'chat_request',
+        chatId: requestData.chatId,
+        requesterId: requestData.requesterId
+      },
+      icon: requestData.requesterAvatar
+    });
+  }
 };
