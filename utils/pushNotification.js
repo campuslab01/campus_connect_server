@@ -25,6 +25,7 @@ const sendPushNotification = async (userId, notification) => {
     }).select('token');
 
     if (tokens.length === 0) {
+      console.warn(`[FCM] No active tokens found for user ${userId}. Skipping send.`);
       return { success: false, reason: 'No active tokens found' };
     }
 
@@ -54,13 +55,16 @@ const sendPushNotification = async (userId, notification) => {
       }
     };
 
+    console.log(`[FCM] Sending push to ${fcmTokens.length} token(s) for user ${userId}. Title: ${notification.title}`);
     const response = await admin.messaging().sendEachForMulticast(message);
+    console.log(`[FCM] sendEachForMulticast result: success=${response.successCount}, failure=${response.failureCount}`);
 
     // Remove invalid tokens
     if (response.failureCount > 0) {
       const invalidTokens = [];
       response.responses.forEach((resp, idx) => {
         if (!resp.success && resp.error) {
+          console.warn(`[FCM] Token send failed for token index ${idx}: ${resp.error?.message || 'unknown error'}`);
           invalidTokens.push(fcmTokens[idx]);
         }
       });
@@ -70,6 +74,7 @@ const sendPushNotification = async (userId, notification) => {
           { token: { $in: invalidTokens } },
           { isActive: false }
         );
+        console.warn(`[FCM] Deactivated ${invalidTokens.length} invalid token(s) for user ${userId}.`);
       }
     }
 
