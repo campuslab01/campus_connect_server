@@ -18,8 +18,8 @@ exports.verifyFace = async (req, res, next) => {
       return res.status(401).json({ message: 'User not authenticated.' });
     }
 
-    // Assuming user.profileImage contains the URL of the user's existing profile picture
-    if (!user.profileImage) {
+    const profileImageUrl = req.body?.profileImageUrl || user.profileImage;
+    if (!profileImageUrl) {
       return res.status(400).json({ message: 'User profile image not found for comparison.' });
     }
 
@@ -27,7 +27,16 @@ exports.verifyFace = async (req, res, next) => {
     formData.append('api_key', FACEPP_API_KEY);
     formData.append('api_secret', FACEPP_API_SECRET);
     formData.append('image_file1', req.file.buffer, { filename: req.file.originalname });
-    formData.append('image_url2', user.profileImage);
+
+    let usedFile2 = false;
+    try {
+      const imgResp = await axios.get(profileImageUrl, { responseType: 'arraybuffer' });
+      const buf = Buffer.from(imgResp.data);
+      formData.append('image_file2', buf, { filename: 'profile.jpg' });
+      usedFile2 = true;
+    } catch (e) {
+      formData.append('image_url2', profileImageUrl);
+    }
 
     const response = await axios.post(FACEPP_COMPARE_URL, formData, {
       headers: {
@@ -37,23 +46,20 @@ exports.verifyFace = async (req, res, next) => {
 
     const { confidence, thresholds } = response.data;
 
-    // Define a confidence threshold for successful verification
-    const VERIFICATION_THRESHOLD = 75; // Example threshold, adjust as needed
+    const recommendedThreshold = thresholds?.['1e-4'] || thresholds?.['1e-5'] || 75;
+    const isVerified = typeof confidence === 'number' && confidence >= recommendedThreshold;
 
-    let isVerified = false;
-    if (confidence && confidence >= VERIFICATION_THRESHOLD) {
-      isVerified = true;
-    }
-
-    // Update user's verification status in the database
     user.isVerified = isVerified;
+    user.verified = isVerified;
     await user.save();
 
     res.status(200).json({
       message: 'Face verification processed.',
+      verified: isVerified,
       isVerified,
       confidence,
       thresholds,
+      usedFileComparison: usedFile2 === true
     });
 
   } catch (error) {
