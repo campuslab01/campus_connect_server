@@ -244,7 +244,7 @@ app.use('/api/notifications', authenticateToken, notificationRoutes);
 app.post('/api/notify/test', authenticateToken, notifyTest);
 app.use('/api/e2ee', e2eeRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/verify', authenticateToken, verifyRoutes);
+app.use('/api', authenticateToken, verifyRoutes);
 
 // 404 handler - catch all routes that don't match any API endpoints
 app.use((req, res) => {
