@@ -1,10 +1,9 @@
 const express = require('express');
 const {
-  createOrder,
-  verifyPayment,
+  createPaymentRequest,
   getPremiumStatus,
   handleWebhook
-} = require('../controllers/paymentController');
+} = require('../controllers/instamojoController');
 const { authenticateToken } = require('../middlewares/auth');
 const { generalLimiter } = require('../middlewares/security');
 
@@ -24,12 +23,13 @@ router.get('/premium-status', generalLimiter, getPremiumStatus);
 // @route   POST /api/payments/create-order
 // @desc    Create Razorpay order for premium subscription
 // @access  Private
-router.post('/create-order', generalLimiter, createOrder);
+router.post('/create-payment', generalLimiter, createPaymentRequest);
 
 // @route   POST /api/payments/verify
 // @desc    Verify payment and activate premium
 // @access  Private
-router.post('/verify', generalLimiter, verifyPayment);
+// Instamojo uses webhooks for verification; client redirects to longurl
+// Add optional endpoint for manual verification if needed
 
 module.exports = router;
 
