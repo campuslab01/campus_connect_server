@@ -49,7 +49,14 @@ exports.createPaymentRequest = async (req, res, next) => {
     for (const base of candidates) {
       try {
         const url = base.endsWith('/') ? `${base}payment-requests/` : `${base}/payment-requests/`;
-        const resp = await axios.post(url, payload, { headers, timeout: 20000 });
+        const form = new URLSearchParams();
+        Object.entries(payload).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) form.append(k, String(v));
+        });
+        const resp = await axios.post(url, form, {
+          headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 20000
+        });
         data = resp.data;
         break;
       } catch (err) {
