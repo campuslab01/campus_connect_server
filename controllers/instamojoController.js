@@ -35,11 +35,49 @@ exports.createPaymentRequest = async (req, res, next) => {
       webhook: process.env.SERVER_PUBLIC_URL ? `${process.env.SERVER_PUBLIC_URL}/api/payment/webhook` : undefined
     };
 
-    const url = IM_ENDPOINT.endsWith('/') ? `${IM_ENDPOINT}payment-requests/` : `${IM_ENDPOINT}/payment-requests/`;
-    const { data } = await axios.post(url, payload, { headers, timeout: 20000 });
+    // Try primary endpoint, then fallback to production endpoint if DNS fails
+    const candidates = [];
+    const primary = IM_ENDPOINT && IM_ENDPOINT.trim().length > 0 ? IM_ENDPOINT.trim() : 'https://test.instamojo.com/api/1.1/';
+    candidates.push(primary);
+    if (!/instamojo\.com\/api\/1\.1\/?$/.test(primary)) {
+      candidates.push('https://test.instamojo.com/api/1.1/');
+    }
+    candidates.push('https://www.instamojo.com/api/1.1/');
 
-    if (!data || !data.success) {
-      return res.status(400).json({ status: 'error', message: data?.message || 'Failed to create payment request' });
+    let data;
+    let lastErr;
+    for (const base of candidates) {
+      try {
+        const url = base.endsWith('/') ? `${base}payment-requests/` : `${base}/payment-requests/`;
+        const resp = await axios.post(url, payload, { headers, timeout: 20000 });
+        data = resp.data;
+        break;
+      } catch (err) {
+        lastErr = err;
+        const code = err?.code || err?.response?.status;
+        const msg = err?.message || err?.response?.data?.message;
+        // Retry only for DNS/network errors
+        if (code === 'ENOTFOUND' || code === 'EAI_AGAIN' || code === 'ECONNREFUSED') {
+          continue;
+        }
+        // For auth errors, stop and return
+        if (err?.response?.status === 401 || err?.response?.status === 403) {
+          return res.status(502).json({ status: 'error', message: 'Payment gateway authentication failed. Check IM_API_KEY/IM_AUTH_TOKEN.' });
+        }
+        // Otherwise try next, but if none left we'll handle below
+        continue;
+      }
+    }
+
+    if (!data) {
+      const code = lastErr?.code || lastErr?.response?.status;
+      const msg = lastErr?.response?.data?.message || lastErr?.message || 'Failed to reach Instamojo';
+      const isDns = code === 'ENOTFOUND' || code === 'EAI_AGAIN';
+      return res.status(isDns ? 502 : 500).json({ status: 'error', message: isDns ? 'Instamojo DNS resolution failed. Please retry or use production endpoint.' : msg });
+    }
+    if (!data.success) {
+      const apiMsg = data?.message || 'Failed to create payment request';
+      return res.status(400).json({ status: 'error', message: apiMsg });
     }
 
     const pr = data.payment_request;
