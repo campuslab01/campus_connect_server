@@ -99,6 +99,26 @@ exports.handleWebhook = async (req, res, next) => {
   try {
     // Instamojo sends form-encoded body by default; ensure express can parse it
     const payload = req.body || {};
+    const macSecret = process.env.IM_PRIVATE_SALT;
+    if (!macSecret) {
+      return res.status(503).json({ status: 'error', message: 'Webhook MAC secret not configured' });
+    }
+
+    // Verify MAC signature
+    const receivedMac = String(payload.mac || '').trim().toLowerCase();
+    const verifyObj = { ...payload };
+    delete verifyObj.mac;
+    const keys = Object.keys(verifyObj).sort();
+    const message = keys.map((k) => String(verifyObj[k])).join('|');
+    const hmacSha1 = require('crypto').createHmac('sha1', macSecret).update(message).digest('hex');
+    let valid = hmacSha1 === receivedMac;
+    if (!valid) {
+      const md5 = require('crypto').createHash('md5').update(message + macSecret).digest('hex');
+      valid = md5 === receivedMac;
+    }
+    if (!valid) {
+      return res.status(401).json({ status: 'error', message: 'Invalid webhook signature' });
+    }
     const status = payload.status;
     // Extract userId from purpose string ("... user:<id>")
     let userId = null;
