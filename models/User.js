@@ -151,6 +151,23 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  // Face verification
+  isVerified: {
+    type: Boolean,
+    default: false
+  },
+  faceTokenEncrypted: {
+    type: String,
+    default: null
+  },
+  verificationScore: {
+    type: Number,
+    default: 0
+  },
+  lastVerificationAttempt: {
+    type: Date,
+    default: null
+  },
   // Payment Provider metadata can be added via notes if needed
   
   // Timestamps

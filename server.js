@@ -34,6 +34,7 @@ const notificationRoutes = require('./routes/notifications');
 const { notifyTest } = require('./controllers/notificationController');
 const e2eeRoutes = require('./routes/e2ee');
 const paymentRoutes = require('./routes/payment');
+const faceRoutes = require('./routes/face');
 const verifyRoutes = require('./routes/verify');
 const { healthCheck } = require('./routes/health');
 
@@ -244,6 +245,7 @@ app.use('/api/notifications', authenticateToken, notificationRoutes);
 app.post('/api/notify/test', authenticateToken, notifyTest);
 app.use('/api/e2ee', e2eeRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/face', faceRoutes);
 app.use('/api', authenticateToken, verifyRoutes);
 
 // 404 handler - catch all routes that don't match any API endpoints
