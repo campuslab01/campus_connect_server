@@ -159,7 +159,7 @@ exports.verifyUser = async (req, res, next) => {
     if (!isLive) return res.status(400).json({ status: 'error', message: 'Liveness failed. Please retake a clear selfie.' });
 
     // Detect on profile image
-    const profileImageUrl = user.profileImage;
+    const profileImageUrl = req.body?.profileImageUrl || user.profileImage || (Array.isArray(user.photos) ? user.photos[0] : null);
     if (!profileImageUrl) return res.status(400).json({ status: 'error', message: 'Profile image not found' });
     let profileToken = null;
     try {
