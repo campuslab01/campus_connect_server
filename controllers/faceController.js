@@ -34,6 +34,9 @@ function decryptToken(b64) {
 
 exports.detect = async (req, res, next) => {
   try {
+    if (!FACEPP_API_KEY || !FACEPP_API_SECRET) {
+      return res.status(503).json({ status: 'error', message: 'Face++ API not configured' });
+    }
     if (!req.file) return res.status(400).json({ status: 'error', message: 'Image file required' });
     const form = new FormData();
     form.append('api_key', FACEPP_API_KEY);
@@ -60,6 +63,9 @@ exports.detect = async (req, res, next) => {
 
 exports.liveness = async (req, res, next) => {
   try {
+    if (!FACEPP_API_KEY || !FACEPP_API_SECRET) {
+      return res.status(503).json({ status: 'error', message: 'Face++ API not configured' });
+    }
     if (!req.file) return res.status(400).json({ status: 'error', message: 'Selfie required' });
     // Basic anti-spoof using detect attributes as proxy (production liveness API can replace this)
     const form = new FormData();
@@ -87,6 +93,9 @@ exports.liveness = async (req, res, next) => {
 
 exports.compare = async (req, res, next) => {
   try {
+    if (!FACEPP_API_KEY || !FACEPP_API_SECRET) {
+      return res.status(503).json({ status: 'error', message: 'Face++ API not configured' });
+    }
     const { selfieToken, profileToken, profileImageUrl } = req.body || {};
     let ft1 = selfieToken;
     let ft2 = profileToken;
@@ -136,6 +145,9 @@ exports.compare = async (req, res, next) => {
 
 exports.verifyUser = async (req, res, next) => {
   try {
+    if (!FACEPP_API_KEY || !FACEPP_API_SECRET) {
+      return res.status(503).json({ status: 'error', message: 'Face++ API not configured' });
+    }
     const user = req.user;
     if (!user) return res.status(401).json({ status: 'error', message: 'Authentication required' });
     if (!req.file) return res.status(400).json({ status: 'error', message: 'Selfie image required' });
