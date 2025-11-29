@@ -3,7 +3,7 @@ const User = require('../models/User');
 const { logError } = require('../utils/logger');
 
 const IM_API_KEY = process.env.IM_API_KEY;
-const IM_AUTH_TOKEN = process.env.IM_AUTH_TOKEN;
+const IM_AUTH_TOKEN = process.env.IM_AUTH_TOKEN || process.env.IM_API_TOKEN;
 const IM_ENDPOINT = process.env.IM_ENDPOINT || 'https://test.instamojo.com/api/1.1/';
 
 const headers = {
@@ -21,7 +21,7 @@ exports.createPaymentRequest = async (req, res, next) => {
     const currency = 'INR';
 
     if (!IM_API_KEY || !IM_AUTH_TOKEN) {
-      return res.status(503).json({ status: 'error', message: 'Payment service not configured' });
+      return res.status(503).json({ status: 'error', message: 'Payment service not configured (missing IM_API_KEY/IM_AUTH_TOKEN or IM_API_TOKEN)' });
     }
 
     const payload = {
