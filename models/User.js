@@ -156,15 +156,11 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  faceTokenEncrypted: {
-    type: String,
-    default: null
-  },
-  verificationScore: {
+  faceMatchScore: {
     type: Number,
     default: 0
   },
-  lastVerificationAttempt: {
+  lastFaceVerificationAt: {
     type: Date,
     default: null
   },
