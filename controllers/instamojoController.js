@@ -2,9 +2,18 @@ const axios = require('axios');
 const User = require('../models/User');
 const { logError } = require('../utils/logger');
 
-const IM_API_KEY = process.env.IM_API_KEY;
-const IM_AUTH_TOKEN = process.env.IM_AUTH_TOKEN || process.env.IM_API_TOKEN;
-const IM_ENDPOINT = process.env.IM_ENDPOINT || 'https://test.instamojo.com/api/1.1/';
+const sanitize = (v) => {
+  if (!v) return v;
+  let s = String(v).trim();
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith('\'') && s.endsWith('\'')) || (s.startsWith('`') && s.endsWith('`'))) {
+    s = s.slice(1, -1);
+  }
+  return s.trim();
+};
+
+const IM_API_KEY = sanitize(process.env.IM_API_KEY);
+const IM_AUTH_TOKEN = sanitize(process.env.IM_AUTH_TOKEN || process.env.IM_API_TOKEN);
+const IM_ENDPOINT = sanitize(process.env.IM_ENDPOINT) || 'https://test.instamojo.com/api/1.1/';
 
 const headers = {
   'X-Api-Key': IM_API_KEY || '',
@@ -37,7 +46,7 @@ exports.createPaymentRequest = async (req, res, next) => {
 
     // Try primary endpoint, then fallback to production endpoint if DNS fails
     const candidates = [];
-    const primary = IM_ENDPOINT && IM_ENDPOINT.trim().length > 0 ? IM_ENDPOINT.trim() : 'https://test.instamojo.com/api/1.1/';
+    const primary = IM_ENDPOINT && IM_ENDPOINT.length > 0 ? IM_ENDPOINT : 'https://test.instamojo.com/api/1.1/';
     candidates.push(primary);
     if (!/instamojo\.com\/api\/1\.1\/?$/.test(primary)) {
       candidates.push('https://test.instamojo.com/api/1.1/');
