@@ -264,6 +264,9 @@ const updateProfile = async (req, res, next) => {
       interests,
       lookingFor,
       relationshipStatus,
+      college,
+      department,
+      year,
       showAge,
       showCollege,
       showDepartment
@@ -277,6 +280,9 @@ const updateProfile = async (req, res, next) => {
     if (interests) updateData.interests = interests;
     if (lookingFor) updateData.lookingFor = lookingFor;
     if (relationshipStatus) updateData.relationshipStatus = relationshipStatus;
+    if (college) updateData.college = college;
+    if (department) updateData.department = department;
+    if (year) updateData.year = year;
     if (showAge !== undefined) updateData.showAge = showAge;
     if (showCollege !== undefined) updateData.showCollege = showCollege;
     if (showDepartment !== undefined) updateData.showDepartment = showDepartment;
