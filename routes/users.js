@@ -43,6 +43,11 @@ router.post('/:id/like', likeUser);
 // @access  Private
 router.delete('/:id/like', unlikeUser);
 
+// @route   POST /api/users/swipe
+// @desc    Register a swipe attempt and enforce limits
+// @access  Private
+router.post('/swipe', require('../controllers/userController').registerSwipe);
+
 // @route   POST /api/users/:id/block
 // @desc    Block a user
 // @access  Private

@@ -15,15 +15,37 @@ const getConfessions = async (req, res, next) => {
       query.category = category;
     }
 
+    const user = req.user ? await require('../models/User').findById(req.user._id) : null;
+    let enforcedLimit = parseInt(limit);
+    let locked = false;
+    if (user) {
+      const { resetIfNeeded, confessionLimitFor } = require('../utils/membership');
+      resetIfNeeded(user);
+      const max = confessionLimitFor(user);
+      if (Number.isFinite(max)) {
+        const remaining = Math.max(0, max - (user.confessionReadsToday || 0));
+        if (remaining <= 0) {
+          enforcedLimit = 0;
+          locked = true;
+        } else {
+          enforcedLimit = Math.min(enforcedLimit, remaining);
+        }
+      }
+    }
+
     const confessions = await Confession.find(query)
       .populate('author', 'name profileImage verified')
       .populate('comments.author', 'name profileImage verified')
       .populate('comments.replies.author', 'name profileImage verified')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(enforcedLimit);
 
     const total = await Confession.countDocuments(query);
+    if (user) {
+      user.confessionReadsToday = (user.confessionReadsToday || 0) + confessions.length;
+      await user.save();
+    }
 
     res.status(200).json({
       status: 'success',
@@ -35,6 +57,11 @@ const getConfessions = async (req, res, next) => {
           totalConfessions: total,
           hasNext: skip + confessions.length < total,
           hasPrev: parseInt(page) > 1
+        },
+        meta: {
+          locked,
+          confessionLimit: user ? (require('../utils/membership').confessionLimitFor(user)) : null,
+          confessionReadsToday: user ? user.confessionReadsToday : null
         }
       }
     });

@@ -151,6 +151,27 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  membershipLevel: {
+    type: String,
+    enum: ['free', 'prime'],
+    default: 'free'
+  },
+  swipesToday: {
+    type: Number,
+    default: 0
+  },
+  swipesResetAt: {
+    type: Date,
+    default: null
+  },
+  confessionReadsToday: {
+    type: Number,
+    default: 0
+  },
+  confessionResetAt: {
+    type: Date,
+    default: null
+  },
   // Face verification
   isVerified: {
     type: Boolean,
@@ -216,6 +237,11 @@ userSchema.pre('save', function(next) {
 // Instance method to check password
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
+};
+
+userSchema.methods.isPrimeActive = function() {
+  const premiumActive = Boolean(this.isPremium && this.premiumExpiresAt && new Date(this.premiumExpiresAt) > new Date());
+  return this.membershipLevel === 'prime' || premiumActive;
 };
 
 // Instance method to get public profile

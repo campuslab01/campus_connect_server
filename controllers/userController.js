@@ -188,7 +188,6 @@ const likeUser = async (req, res, next) => {
       });
     }
 
-    // Get current user
     const currentUser = await User.findById(currentUserId);
     const targetUser = await User.findById(targetUserId);
 
@@ -215,7 +214,6 @@ const likeUser = async (req, res, next) => {
       });
     }
 
-    // Add like
     currentUser.likes.push(targetUserId);
     targetUser.likedBy.push(currentUserId);
 
@@ -228,6 +226,7 @@ const likeUser = async (req, res, next) => {
       targetUser.matches.push(currentUserId);
     }
 
+    currentUser.swipesToday = (currentUser.swipesToday || 0) + 1;
     await currentUser.save();
     await targetUser.save();
 
@@ -557,5 +556,34 @@ module.exports = {
   getUserLikes,
   getSuggestedUsers,
   blockUser,
-  reportUser
+  reportUser,
+  registerSwipe
+};
+    const { resetIfNeeded, swipeLimitFor } = require('../utils/membership');
+    resetIfNeeded(currentUser);
+    const limit = swipeLimitFor(currentUser);
+    if (currentUser.swipesToday >= limit) {
+      return res.status(429).json({ status: 'error', message: 'Daily swipe limit reached', data: { limit, swipesToday: currentUser.swipesToday } });
+    }
+// @desc    Register a swipe attempt and enforce limits
+// @route   POST /api/users/swipe
+// @access  Private
+const registerSwipe = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'User not found' });
+    }
+    const { resetIfNeeded, swipeLimitFor, isPrime } = require('../utils/membership');
+    resetIfNeeded(user);
+    const limit = swipeLimitFor(user);
+    if (user.swipesToday >= limit) {
+      return res.status(429).json({ status: 'error', message: 'Daily swipe limit reached', data: { limit, swipesToday: user.swipesToday } });
+    }
+    user.swipesToday = (user.swipesToday || 0) + 1;
+    await user.save();
+    return res.status(200).json({ status: 'success', data: { swipesToday: user.swipesToday, limit, prime: isPrime(user) } });
+  } catch (error) {
+    next(error);
+  }
 };

@@ -148,6 +148,7 @@ exports.handleWebhook = async (req, res, next) => {
         if (user) {
           user.isPremium = true;
           user.premiumExpiresAt = expiresAt;
+          user.membershipLevel = 'prime';
           await user.save();
         }
       }
@@ -162,8 +163,14 @@ exports.handleWebhook = async (req, res, next) => {
 exports.getPremiumStatus = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id);
-    const active = Boolean(user?.isPremium && user?.premiumExpiresAt && new Date(user.premiumExpiresAt) > new Date());
-    res.status(200).json({ status: 'success', active });
+    const active = Boolean(user?.isPremium && user?.premiumExpiresAt && new Date(user.premiumExpiresAt) > new Date()) || user?.membershipLevel === 'prime';
+    const { swipeLimitFor, confessionLimitFor, resetIfNeeded } = require('../utils/membership');
+    resetIfNeeded(user);
+    const swipeLimit = swipeLimitFor(user);
+    const confessionLimit = confessionLimitFor(user);
+    const swipeRemaining = Number.isFinite(swipeLimit) ? Math.max(0, swipeLimit - (user.swipesToday || 0)) : null;
+    const confessionRemaining = Number.isFinite(confessionLimit) ? Math.max(0, confessionLimit - (user.confessionReadsToday || 0)) : null;
+    res.status(200).json({ status: 'success', active, membershipLevel: user.membershipLevel, expiresAt: user.premiumExpiresAt, meta: { swipeLimit, swipesToday: user.swipesToday || 0, swipeRemaining, confessionLimit, confessionReadsToday: user.confessionReadsToday || 0, confessionRemaining } });
   } catch (error) {
     next(error);
   }
