@@ -5,7 +5,7 @@ const hive = require('../services/hiveService');
 
 exports.verifySelfie = async (req, res, next) => {
   try {
-    if (!process.env.HIVE_API_KEY) {
+    if (!(process.env.HIVE_API_KEY || process.env.HIVE_SECRET_KEY)) {
       return res.status(503).json({ status: 'error', message: 'Hive API not configured' });
     }
 
@@ -37,13 +37,17 @@ exports.verifySelfie = async (req, res, next) => {
     const resp = await hive.verifyFaces(selfieBase64, profileBase64);
 
     const score = typeof resp.confidence === 'number' ? resp.confidence : (typeof resp.score === 'number' ? resp.score : 0);
-    const threshold = 0.85;
+    const threshold = 0.75;
     const verified = Number(score) >= threshold;
 
     const user = await User.findById(req.user._id);
     user.isVerified = verified;
     user.faceMatchScore = Math.round(Number(score) * 100);
     user.lastFaceVerificationAt = new Date();
+    if (verified) {
+      user.verifiedAt = new Date();
+      user.verified = true;
+    }
     await user.save();
 
     return res.status(200).json({ status: 'success', verified, score: Number(score), threshold });

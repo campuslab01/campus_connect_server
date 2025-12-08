@@ -14,8 +14,10 @@ const {
   rejectChatRequest
 } = require('../controllers/chatController');
 const { validateMessage } = require('../middlewares/validation');
+const { requireVerification } = require('../middlewares/auth');
 
 const router = express.Router();
+router.use(requireVerification);
 
 // @route   GET /api/chat
 // @desc    Get user's chats

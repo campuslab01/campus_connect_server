@@ -1,12 +1,20 @@
 const axios = require('axios');
 
-const HIVE_API_KEY = process.env.HIVE_API_KEY;
+const HIVE_ACCESS_KEY_ID = process.env.HIVE_ACCESS_KEY_ID;
+const HIVE_SECRET_KEY = process.env.HIVE_SECRET_KEY;
+const HIVE_API_KEY = process.env.HIVE_API_KEY || HIVE_SECRET_KEY;
 const HIVE_BASE_URL = process.env.HIVE_BASE_URL || 'https://api.thehive.ai';
 
-const headers = () => ({
-  Authorization: `Token ${String(HIVE_API_KEY || '').trim()}`,
-  'Content-Type': 'application/json'
-});
+const headers = () => {
+  const h = { 'Content-Type': 'application/json' };
+  const token = String(HIVE_API_KEY || '').trim();
+  if (token) {
+    h.Authorization = `Token ${token}`;
+  }
+  // Access Key ID is not required by Hive API for token auth, but we allow env storage for completeness
+  // If future endpoints require it, add appropriate header usage here
+  return h;
+};
 
 const postJson = async (path, payload) => {
   const url = `${HIVE_BASE_URL}${path}`;

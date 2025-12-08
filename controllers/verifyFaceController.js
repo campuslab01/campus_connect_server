@@ -58,6 +58,10 @@ exports.verify = async (req, res, next) => {
     user.isVerified = verified;
     user.faceMatchScore = score;
     user.lastFaceVerificationAt = new Date();
+    if (verified) {
+      user.verifiedAt = new Date();
+      user.verified = true;
+    }
     await user.save();
 
     return res.status(200).json({ status: 'success', verified, score, threshold });

@@ -66,7 +66,7 @@ const authenticateToken = async (req, res, next) => {
 
 // Middleware to check if user is verified
 const requireVerification = (req, res, next) => {
-  if (!req.user.verified) {
+  if (!(req.user.isVerified || req.user.verified)) {
     return res.status(403).json({
       status: 'error',
       message: 'Account verification required'

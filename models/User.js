@@ -185,6 +185,10 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  verifiedAt: {
+    type: Date,
+    default: null
+  },
   // Payment Provider metadata can be added via notes if needed
   
   // Timestamps
