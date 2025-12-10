@@ -60,12 +60,12 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// Middleware to check if user is verified
+// Middleware to check if user is verified via email (face verification optional)
 const requireVerification = (req, res, next) => {
-  if (!(req.user.isVerified || req.user.verified)) {
+  if (!req.user.emailVerified) {
     return res.status(403).json({
       status: 'error',
-      message: 'Account verification required'
+      message: 'Email verification required'
     });
   }
   next();
