@@ -34,10 +34,6 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // Update last seen
-    user.lastSeen = new Date();
-    await user.save();
-
     // Add user to request object
     req.user = user;
     next();

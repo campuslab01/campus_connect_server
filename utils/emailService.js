@@ -13,9 +13,11 @@ const initializeEmailService = () => {
   mailgunDomain = process.env.MAILGUN_DOMAIN;
   const mailgunApiKey = process.env.MAILGUN_API_KEY;
 
-  console.log('📧 Email Service Configuration (Mailgun):');
-  console.log('   Domain:', mailgunDomain || 'NOT SET');
-  console.log('   API Key:', mailgunApiKey ? '***SET***' : 'NOT SET');
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('📧 Email Service Configuration (Mailgun):');
+    console.log('   Domain:', mailgunDomain || 'NOT SET');
+    console.log('   API Key:', mailgunApiKey ? '***SET***' : 'NOT SET');
+  }
 
   if (!mailgunApiKey || !mailgunDomain) {
     if (process.env.NODE_ENV === 'production') {
@@ -32,9 +34,13 @@ const initializeEmailService = () => {
       username: 'api',
       key: mailgunApiKey,
     });
-    console.log('✅ Mailgun client initialized successfully.');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('✅ Mailgun client initialized successfully.');
+    }
   } catch (error) {
-    console.error('❌ Error initializing Mailgun client:', error.message);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('❌ Error initializing Mailgun client:', error.message);
+    }
     mg = null;
   }
 };
@@ -78,7 +84,9 @@ class EmailBuilder {
   async send() {
     // If Mailgun is not configured, log instead of sending
     if (!mg) {
-      console.log('📧 [Email would be sent via Mailgun]', this.mailOptions);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('📧 [Email would be sent via Mailgun]', this.mailOptions);
+      }
       return { id: '<test-message-id@mailgun>', message: 'Queued. Thank you.' };
     }
 
@@ -88,25 +96,30 @@ class EmailBuilder {
     }
 
     try {
-      console.log('🚀 Sending email via Mailgun...');
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('🚀 Sending email via Mailgun...');
+      }
       const msg = await mg.messages.create(mailgunDomain, this.mailOptions);
-
-      console.log('✅ Email sent successfully via Mailgun');
-      console.log('   Message ID:', msg.id);
-      console.log('   To:', this.mailOptions.to);
-      console.log('   Subject:', this.mailOptions.subject);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('✅ Email sent successfully via Mailgun');
+        console.log('   Message ID:', msg.id);
+        console.log('   To:', this.mailOptions.to);
+        console.log('   Subject:', this.mailOptions.subject);
+      }
       return msg;
     } catch (error) {
-      console.error('❌ Error sending email via Mailgun:');
-      console.error('   Error message:', error.message);
-      if (error.details) {
-        console.error('   Error details:', error.details);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('❌ Error sending email via Mailgun:');
+        console.error('   Error message:', error.message);
+        if (error.details) {
+          console.error('   Error details:', error.details);
+        }
+        if (error.status) {
+          console.error('   Status code:', error.status);
+        }
+        console.error('   To:', this.mailOptions.to);
+        console.error('   Subject:', this.mailOptions.subject);
       }
-      if (error.status) {
-        console.error('   Status code:', error.status);
-      }
-      console.error('   To:', this.mailOptions.to);
-      console.error('   Subject:', this.mailOptions.subject);
       throw error;
     }
   }

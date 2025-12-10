@@ -219,12 +219,10 @@ userSchema.virtual('displayAge').get(function() {
 
 // Pre-save middleware to hash password
 userSchema.pre('save', async function(next) {
-  // Only hash the password if it has been modified (or is new)
   if (!this.isModified('password')) return next();
-  
   try {
-    // Hash password with cost of 12 (increased from default 10 for better security)
-    const salt = await bcrypt.genSalt(12);
+    const rounds = Number(process.env.BCRYPT_ROUNDS) || (process.env.NODE_ENV === 'production' ? 10 : 12);
+    const salt = await bcrypt.genSalt(rounds);
     this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (error) {
