@@ -548,23 +548,6 @@ const reportUser = async (req, res, next) => {
   }
 };
 
-module.exports = {
-  searchUsers,
-  getUserProfile,
-  likeUser,
-  unlikeUser,
-  getUserLikes,
-  getSuggestedUsers,
-  blockUser,
-  reportUser,
-  registerSwipe
-};
-    const { resetIfNeeded, swipeLimitFor } = require('../utils/membership');
-    resetIfNeeded(currentUser);
-    const limit = swipeLimitFor(currentUser);
-    if (currentUser.swipesToday >= limit) {
-      return res.status(429).json({ status: 'error', message: 'Daily swipe limit reached', data: { limit, swipesToday: currentUser.swipesToday } });
-    }
 // @desc    Register a swipe attempt and enforce limits
 // @route   POST /api/users/swipe
 // @access  Private
@@ -586,4 +569,15 @@ const registerSwipe = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+module.exports = {
+  searchUsers,
+  getUserProfile,
+  likeUser,
+  unlikeUser,
+  getUserLikes,
+  getSuggestedUsers,
+  blockUser,
+  reportUser,
+  registerSwipe
 };

@@ -7,7 +7,8 @@ const {
   getUserLikes,
   getSuggestedUsers,
   blockUser,
-  reportUser
+  reportUser,
+  registerSwipe
 } = require('../controllers/userController');
 const { validateSearch } = require('../middlewares/validation');
 
@@ -47,7 +48,7 @@ router.delete('/:id/like', requireVerification, unlikeUser);
 // @route   POST /api/users/swipe
 // @desc    Register a swipe attempt and enforce limits
 // @access  Private
-router.post('/swipe', requireVerification, require('../controllers/userController').registerSwipe);
+router.post('/swipe', requireVerification, registerSwipe);
 
 // @route   POST /api/users/:id/block
 // @desc    Block a user
