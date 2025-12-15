@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-  register,
+  registerInit,
   login,
   getMe,
   updateProfile,
@@ -33,9 +33,9 @@ const { passwordResetLimiter } = require('../middlewares/security');
 const router = express.Router();
 
 // @route   POST /api/auth/register
-// @desc    Register a new user
+// @desc    Initiate signup with OTP
 // @access  Public
-router.post('/register', validateRegistration, register);
+router.post('/register', validateRegistration, registerInit);
 
 // @route   POST /api/auth/login
 // @desc    Login user
@@ -88,3 +88,6 @@ router.post('/resend-password-otp', passwordResetLimiter, validateResendPassword
 router.post('/logout', authenticateToken, logout);
 
 module.exports = router;
+// Signup OTP verification
+router.post('/verify-signup-otp', require('../controllers/authController').verifySignupOtp);
+router.post('/resend-signup-otp', require('../controllers/authController').resendSignupOtp);

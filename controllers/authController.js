@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('../models/User');
 const PasswordResetOtp = require('../models/PasswordResetOtp');
+const SignupOtp = require('../models/SignupOtp');
 const { Email, emailTemplates } = require('../utils/emailService');
 const { validationResult } = require('express-validator');
 const { normalizeUserImages } = require('../utils/imageNormalizer');
@@ -14,10 +15,10 @@ const generateToken = (userId) => {
   });
 };
 
-// @desc    Register user
+// @desc    Initiate signup with OTP
 // @route   POST /api/auth/register
 // @access  Public
-const register = async (req, res, next) => {
+const registerInit = async (req, res, next) => {
   try {
     // Check for validation errors
     const errors = validationResult(req);
@@ -61,132 +62,31 @@ const register = async (req, res, next) => {
       });
     }
 
-    // Generate email verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const hashedVerificationToken = crypto
-      .createHash('sha256')
-      .update(verificationToken)
-      .digest('hex');
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Prepare user data (handle images if provided)
-    const userData = {
-      name,
-      email,
-      password,
-      age,
-      gender,
-      college,
-      department,
-      year,
-      emailVerificationToken: hashedVerificationToken,
-      emailVerified: false
-    };
+    const signupPayload = { name, email, password, age, gender, college, department, year };
+    if (profileImage) signupPayload.profileImage = profileImage;
+    if (photos && Array.isArray(photos) && photos.length > 0) signupPayload.photos = photos;
 
-    if (profileImage) {
-      userData.profileImage = profileImage;
-    }
-
-    if (photos && Array.isArray(photos) && photos.length > 0) {
-      userData.photos = photos;
-    }
-
-    // Create user
-    const user = await User.create(userData);
-
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('✅ [REGISTER] User created with images:', {
-        userId: user._id,
-        email: user.email,
-        hasProfileImage: !!user.profileImage,
-        profileImageUrl: user.profileImage ? (user.profileImage.substring(0, 100) + '...') : 'none',
-        hasPhotos: !!user.photos,
-        photosCount: Array.isArray(user.photos) ? user.photos.length : 0,
-        photosUrls: Array.isArray(user.photos) ? user.photos.map((p) => p ? (p.substring(0, 100) + '...') : 'none') : []
-      });
-    }
-
-    // Generate token
-    const token = generateToken(user._id);
-
-    // Remove password from response and normalize image URLs
-    const publicProfile = user.getPublicProfile();
-    const userResponse = normalizeUserImages(publicProfile);
-
-    // Send verification email asynchronously (don't block response)
-    setImmediate(async () => {
-      try {
-        const { Email, emailTemplates } = require('../utils/emailService');
-        const clientUrl = process.env.CLIENT_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5173');
-        const verificationLink = `${clientUrl}/verify-email?token=${verificationToken}&userId=${user._id}`;
-        const build = () => Email.create().to(email).subject('Verify Your Email - Campus Connection').html(emailTemplates.verificationEmail(name, verificationLink));
-        let attempt = 0, maxAttempts = 3;
-        while (attempt < maxAttempts) {
-          try {
-            await build().send();
-            if (process.env.NODE_ENV !== 'production') {
-              console.log(`✅ Verification email sent to: ${email}`);
-            }
-            break;
-          } catch (e) {
-            attempt++;
-            if (attempt >= maxAttempts) throw e;
-            await new Promise(r => setTimeout(r, 1000 * attempt));
-          }
-        }
-      } catch (emailError) {
-        if (process.env.NODE_ENV !== 'production') {
-          console.error('Error sending verification email:', emailError);
-        }
-      }
-    });
+    await SignupOtp.findOneAndUpdate(
+      { email, isUsed: false },
+      { email, otpHash, expiresAt, isUsed: false, attempts: 0, lastSentAt: new Date(), signupData: signupPayload },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
 
     setImmediate(async () => {
       try {
-        const base64 = (s) => typeof s === 'string' && s.startsWith('data:');
-        let changed = false;
-        const updated = {};
-        if (user.profileImage && base64(user.profileImage)) {
-          try {
-            const url = await uploadBase64ToCloudinary(user.profileImage, 'profiles');
-            updated.profileImage = url;
-            changed = true;
-          } catch {}
-        }
-        if (Array.isArray(user.photos) && user.photos.length > 0) {
-          const results = await Promise.allSettled(user.photos.map(async (p) => base64(p) ? await uploadBase64ToCloudinary(p, 'profiles') : p));
-          const newPhotos = results.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean);
-          if (newPhotos.length === user.photos.length) {
-            updated.photos = newPhotos;
-            changed = true;
-          }
-        }
-        if (changed) {
-          await User.findByIdAndUpdate(user._id, updated, { new: false });
-        }
-      } catch {}
+        await Email.create()
+          .to(email)
+          .subject('Your Signup Verification Code')
+          .html(emailTemplates.passwordResetOtpEmail(name || 'User', otp, 10))
+          .send();
+      } catch (e) {}
     });
 
-    // Send welcome notification asynchronously (don't block response)
-    // Note: At this point, user might not have FCM token yet (permission popup comes after)
-    // So we'll also send it when token is saved (see notificationController.js)
-    setImmediate(async () => {
-      try {
-        const { sendWelcomeNotification } = require('../utils/pushNotification');
-        await sendWelcomeNotification(user._id, user.name);
-      } catch (notificationError) {
-        // Don't fail registration if notification fails
-        console.error('Error sending welcome notification:', notificationError);
-      }
-    });
-
-    res.status(201).json({
-      status: 'success',
-      message: 'User registered successfully. Please check your email to verify your account.',
-      data: {
-        user: userResponse,
-        token
-      }
-    });
+    res.status(200).json({ status: 'success', message: 'OTP sent to email. Complete verification to finish signup.' });
   } catch (error) {
     next(error);
   }
@@ -225,6 +125,9 @@ const login = async (req, res, next) => {
       return res.status(401).json({ status: 'error', message: 'Invalid email or password' });
     }
 
+    if (!user.emailVerified) {
+      return res.status(403).json({ status: 'error', message: 'Email verification required' });
+    }
     const token = generateToken(user._id);
     const publicProfile = user.getPublicProfile();
     const userResponse = normalizeUserImages(publicProfile);
@@ -234,6 +137,90 @@ const login = async (req, res, next) => {
     next(error);
   }
 };
+
+const verifySignupOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ status: 'error', message: 'Email and OTP are required' });
+    }
+    const record = await SignupOtp.findOne({ email, isUsed: false });
+    if (!record) {
+      return res.status(400).json({ status: 'error', message: 'Invalid or expired OTP' });
+    }
+    if (record.expiresAt <= new Date()) {
+      return res.status(400).json({ status: 'error', message: 'OTP expired' });
+    }
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+    if (otpHash !== record.otpHash) {
+      record.attempts += 1;
+      await record.save();
+      return res.status(400).json({ status: 'error', message: 'Invalid OTP' });
+    }
+
+    record.isUsed = true;
+    await record.save();
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ status: 'error', message: 'User already exists with this email' });
+    }
+
+    const payload = record.signupData || {};
+    const user = await User.create({ ...payload, emailVerified: true });
+    const token = generateToken(user._id);
+    const userResponse = normalizeUserImages(user.getPublicProfile());
+
+    res.status(200).json({ status: 'success', message: 'Signup completed', data: { user: userResponse, token } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resendSignupOtp = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ status: 'error', message: 'Email is required' });
+    }
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ status: 'error', message: 'User already exists with this email' });
+    }
+    const existing = await SignupOtp.findOne({ email, isUsed: false });
+    const now = new Date();
+    const cooldownMs = 30 * 1000;
+    if (existing && existing.lastSentAt && now - existing.lastSentAt < cooldownMs) {
+      const waitSec = Math.ceil((cooldownMs - (now - existing.lastSentAt)) / 1000);
+      return res.status(429).json({ status: 'error', message: `Please wait ${waitSec}s before resending OTP.` });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await SignupOtp.findOneAndUpdate(
+      { email, isUsed: false },
+      { email, otpHash, expiresAt, isUsed: false, attempts: 0, lastSentAt: new Date() },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    setImmediate(async () => {
+      try {
+        const userName = (existing && existing.signupData && existing.signupData.name) || 'User';
+        await Email.create().to(email).subject('Your Signup Verification Code').html(emailTemplates.passwordResetOtpEmail(userName, otp, 10)).send();
+      } catch (e) {}
+    });
+
+    res.status(200).json({ status: 'success', message: 'OTP resent to your email.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports.registerInit = registerInit;
+module.exports.verifySignupOtp = verifySignupOtp;
+module.exports.resendSignupOtp = resendSignupOtp;
 
 // @desc    Get current user
 // @route   GET /api/auth/me
@@ -805,7 +792,7 @@ const logout = async (req, res, next) => {
 };
 
 module.exports = {
-  register,
+  registerInit,
   login,
   getMe,
   updateProfile,
@@ -818,5 +805,7 @@ module.exports = {
   verifyPasswordOtp,
   updatePasswordWithOtp,
   resendPasswordOtp,
+  verifySignupOtp,
+  resendSignupOtp,
   logout
 };
