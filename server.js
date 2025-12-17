@@ -20,6 +20,11 @@ console.log('SMTP_HOST:', process.env.SMTP_HOST || 'NOT SET');
 console.log('SMTP_USER:', process.env.SMTP_USER ? 'SET' : 'NOT SET');
 console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'SET' : 'NOT SET');
 
+const HIVE_ENABLED = Boolean(process.env.HIVE_BASE_URL && (process.env.HIVE_API_KEY || process.env.HIVE_SECRET_KEY));
+if (!HIVE_ENABLED) {
+  console.error('Hive verification disabled: HIVE_BASE_URL:', process.env.HIVE_BASE_URL ? 'SET' : 'MISSING', 'HIVE_API_KEY:', process.env.HIVE_API_KEY ? 'SET' : 'MISSING');
+}
+
 // Initialize email service
 const { initializeEmailService } = require('./utils/emailService');
 initializeEmailService();
@@ -245,7 +250,13 @@ app.use('/api/notifications', authenticateToken, notificationRoutes);
 app.post('/api/notify/test', authenticateToken, notifyTest);
 app.use('/api/e2ee', e2eeRoutes);
 app.use('/api/payment', paymentRoutes);
-app.use('/api', hiveRoutes);
+if (HIVE_ENABLED) {
+  app.use('/api', hiveRoutes);
+} else {
+  app.post('/api/verify-selfie', authenticateToken, (req, res) => {
+    res.status(503).json({ status: 'error', message: 'Verification provider unavailable' });
+  });
+}
 app.use('/api', authenticateToken, verifyRoutes);
 
 // 404 handler - catch all routes that don't match any API endpoints

@@ -71,6 +71,16 @@ const requireVerification = (req, res, next) => {
   next();
 };
 
+const requireFaceVerification = (req, res, next) => {
+  if (!req.user.isVerified) {
+    return res.status(403).json({
+      status: 'error',
+      message: 'Face verification required'
+    });
+  }
+  next();
+};
+
 // Middleware to check user role (for future admin features)
 const requireRole = (roles) => {
   return (req, res, next) => {
@@ -109,6 +119,7 @@ const optionalAuth = async (req, res, next) => {
 module.exports = {
   authenticateToken,
   requireVerification,
+  requireFaceVerification,
   requireRole,
   optionalAuth
 };
