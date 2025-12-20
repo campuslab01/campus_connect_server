@@ -45,11 +45,8 @@ exports.verifySelfie = async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'Invalid profile image' });
     }
 
-    const selfieBase64 = selfieFile.buffer.toString('base64');
-    const profileBase64 = profileBuffer.toString('base64');
-
-    const selfieDetect = await hive.detectFace(selfieBase64);
-    const profileDetect = await hive.detectFace(profileBase64);
+    const selfieDetect = await hive.detectFaceMedia(selfieFile.buffer);
+    const profileDetect = await hive.detectFaceMedia(profileBuffer);
     const countFaces = (d) => {
       if (!d) return 0;
       if (Array.isArray(d.faces)) return d.faces.length;
@@ -81,7 +78,7 @@ exports.verifySelfie = async (req, res, next) => {
       return res.status(400).json({ status: 'error', message: 'Multiple faces detected in profile image' });
     }
 
-    const resp = await hive.verifyFaces(selfieBase64, profileBase64);
+    const resp = await hive.verifyFacesMedia(selfieFile.buffer, profileBuffer);
     const extractSimilarity = (r) => {
       if (typeof r?.similarity_score === 'number') return r.similarity_score;
       if (typeof r?.confidence === 'number') return r.confidence;

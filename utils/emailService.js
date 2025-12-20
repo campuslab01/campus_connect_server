@@ -393,6 +393,80 @@ const emailTemplates = {
       </html>
     `;
   }
+  ,
+  signupOtpEmail(name, otp, expiresMinutes = 10) {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          }
+          .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          .logo {
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+          }
+          .otp {
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 4px;
+            background: #f1f5ff;
+            color: #333;
+            padding: 12px 20px;
+            border-radius: 8px;
+            text-align: center;
+          }
+          .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="logo">Campus Connection</div>
+          </div>
+          <h2>Signup Verification Code</h2>
+          <p>Hi ${name},</p>
+          <p>Use the verification code below to complete your signup:</p>
+          <div class="otp">${otp}</div>
+          <p>This code expires in <strong>${expiresMinutes} minutes</strong>.</p>
+          <p>If you didn't attempt to sign up, please ignore this email.</p>
+          <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Campus Connection. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
 };
 
 // Initialize on module load

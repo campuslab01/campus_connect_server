@@ -62,6 +62,13 @@ const registerInit = async (req, res, next) => {
       });
     }
 
+    const existingRecord = await SignupOtp.findOne({ email, isUsed: false });
+    const now = new Date();
+    const cooldownMs = 30 * 1000;
+    if (existingRecord && existingRecord.lastSentAt && now - existingRecord.lastSentAt < cooldownMs && existingRecord.expiresAt > now) {
+      return res.status(200).json({ status: 'success', message: 'OTP sent to email. Complete verification to finish signup.' });
+    }
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -81,7 +88,7 @@ const registerInit = async (req, res, next) => {
         await Email.create()
           .to(email)
           .subject('Your Signup Verification Code')
-          .html(emailTemplates.passwordResetOtpEmail(name || 'User', otp, 10))
+          .html(emailTemplates.signupOtpEmail(name || 'User', otp, 10))
           .send();
       } catch (e) {}
     });
@@ -208,7 +215,7 @@ const resendSignupOtp = async (req, res, next) => {
     setImmediate(async () => {
       try {
         const userName = (existing && existing.signupData && existing.signupData.name) || 'User';
-        await Email.create().to(email).subject('Your Signup Verification Code').html(emailTemplates.passwordResetOtpEmail(userName, otp, 10)).send();
+        await Email.create().to(email).subject('Your Signup Verification Code').html(emailTemplates.signupOtpEmail(userName, otp, 10)).send();
       } catch (e) {}
     });
 
