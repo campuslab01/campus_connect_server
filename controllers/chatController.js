@@ -592,6 +592,12 @@ const setQuizConsent = async (req, res, next) => {
       userId: userId.toString()
     });
 
+    // If both consented, start quiz simultaneously
+    const bothConsented = (chat.quizConsent.user1Consent === true && chat.quizConsent.user2Consent === true);
+    if (bothConsented) {
+      io.to(`chat:${chatId}`).emit('quiz:start', { chatId });
+    }
+
     res.status(200).json({
       status: 'success',
       message: 'Quiz consent updated',
@@ -643,9 +649,11 @@ const submitQuiz = async (req, res, next) => {
     if (userIndex === 0) {
       chat.quizScores.user1Score = score;
       chat.quizScores.user1CompletedAt = new Date();
+      chat.quizAnswers.user1 = answers;
     } else {
       chat.quizScores.user2Score = score;
       chat.quizScores.user2CompletedAt = new Date();
+      chat.quizAnswers.user2 = answers;
     }
 
     // Calculate compatibility score if both completed
@@ -667,6 +675,20 @@ const submitQuiz = async (req, res, next) => {
       userName: user.name,
       userId: userId.toString()
     });
+
+    // If both answers are present, exchange selections simultaneously
+    if (chat.quizAnswers.user1 && chat.quizAnswers.user2 && !chat.quizAnswers.exchangedAt) {
+      chat.quizAnswers.exchangedAt = new Date();
+      await chat.save();
+      const user1 = await User.findById(chat.participants[0]).select('name');
+      const user2 = await User.findById(chat.participants[1]).select('name');
+      io.to(`chat:${chatId}`).emit('quiz:selections', {
+        chatId,
+        user1: { id: chat.participants[0].toString(), name: user1?.name, answers: chat.quizAnswers.user1, score: chat.quizScores.user1Score },
+        user2: { id: chat.participants[1].toString(), name: user2?.name, answers: chat.quizAnswers.user2, score: chat.quizScores.user2Score },
+        compatibilityScore: chat.compatibilityScore
+      });
+    }
 
     res.status(200).json({
       status: 'success',

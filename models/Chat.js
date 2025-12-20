@@ -116,6 +116,20 @@ const chatSchema = new mongoose.Schema({
       default: null
     }
   },
+  quizAnswers: {
+    user1: {
+      type: Object,
+      default: null
+    },
+    user2: {
+      type: Object,
+      default: null
+    },
+    exchangedAt: {
+      type: Date,
+      default: null
+    }
+  },
   compatibilityScore: {
     type: Number,
     default: null

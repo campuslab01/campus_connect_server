@@ -1,8 +1,12 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const PasswordResetOtp = require('../models/PasswordResetOtp');
 const SignupOtp = require('../models/SignupOtp');
+const Chat = require('../models/Chat');
+const Confession = require('../models/Confession');
+const NotificationToken = require('../models/NotificationToken');
 const { Email, emailTemplates } = require('../utils/emailService');
 const { validationResult } = require('express-validator');
 const { normalizeUserImages } = require('../utils/imageNormalizer');
@@ -798,6 +802,43 @@ const logout = async (req, res, next) => {
   }
 };
 
+// @desc    Delete account and related data
+// @route   DELETE /api/auth/account
+// @access  Private
+const deleteAccount = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const userId = req.user._id;
+
+    await Chat.updateMany({ participants: userId }, { $set: { isActive: false } }, { session });
+    await Confession.updateMany({ author: userId }, { $set: { isActive: false } }, { session });
+    await NotificationToken.deleteMany({ user: userId }, { session });
+
+    await User.updateMany(
+      { _id: { $ne: userId } },
+      {
+        $pull: {
+          likes: userId,
+          likedBy: userId,
+          matches: userId
+        }
+      },
+      { session }
+    );
+
+    await User.findByIdAndDelete(userId, { session });
+
+    await session.commitTransaction();
+    res.status(200).json({ status: 'success', message: 'Account deleted successfully' });
+  } catch (error) {
+    await session.abortTransaction();
+    next(error);
+  } finally {
+    session.endSession();
+  }
+};
+
 module.exports = {
   registerInit,
   login,
@@ -814,5 +855,6 @@ module.exports = {
   resendPasswordOtp,
   verifySignupOtp,
   resendSignupOtp,
-  logout
+  logout,
+  deleteAccount
 };

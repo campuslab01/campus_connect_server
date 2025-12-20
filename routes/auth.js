@@ -13,7 +13,8 @@ const {
   verifyPasswordOtp,
   updatePasswordWithOtp,
   resendPasswordOtp,
-  logout
+  logout,
+  deleteAccount
 } = require('../controllers/authController');
 const { authenticateToken } = require('../middlewares/auth');
 const {
@@ -86,6 +87,10 @@ router.post('/resend-password-otp', passwordResetLimiter, validateResendPassword
 // @desc    Logout user
 // @access  Private
 router.post('/logout', authenticateToken, logout);
+
+// @route   DELETE /api/auth/account
+// @access  Private
+router.delete('/account', authenticateToken, deleteAccount);
 
 module.exports = router;
 // Signup OTP verification
