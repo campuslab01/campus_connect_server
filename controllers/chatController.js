@@ -57,8 +57,15 @@ const getOrCreateChat = async (req, res, next) => {
       });
     }
 
-    // Check if target user exists
-    const targetUser = await User.findById(userId);
+    // Check if target user exists and find existing chat in parallel
+    const [targetUser, existingChat] = await Promise.all([
+      User.findById(userId),
+      Chat.findOne({
+        participants: { $all: [currentUserId, userId] },
+        isActive: true
+      })
+    ]);
+
     if (!targetUser) {
       return res.status(404).json({
         status: 'error',
@@ -66,11 +73,7 @@ const getOrCreateChat = async (req, res, next) => {
       });
     }
 
-    // Find existing chat or create new one
-    let chat = await Chat.findOne({
-      participants: { $all: [currentUserId, userId] },
-      isActive: true
-    });
+    let chat = existingChat;
 
     if (!chat) {
       // Create new chat with pending request status
@@ -469,19 +472,41 @@ const deleteChat = async (req, res, next) => {
 // @access  Private
 const getUnreadCount = async (req, res, next) => {
   try {
-    const chats = await Chat.find({
-      participants: req.user._id,
-      isActive: true
-    });
+    // Optimized aggregation to count unread messages without loading all chats into memory
+    const result = await Chat.aggregate([
+      { 
+        $match: { 
+          participants: req.user._id, 
+          isActive: true 
+        } 
+      },
+      { 
+        $project: {
+          unreadInChat: {
+            $size: {
+              $filter: {
+                input: "$messages",
+                as: "msg",
+                cond: {
+                  $and: [
+                    { $eq: ["$$msg.isRead", false] },
+                    { $ne: ["$$msg.sender", req.user._id] }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      { 
+        $group: { 
+          _id: null, 
+          totalUnread: { $sum: "$unreadInChat" } 
+        } 
+      }
+    ]);
 
-    let unreadCount = 0;
-
-    chats.forEach(chat => {
-      const unreadMessages = chat.messages.filter(
-        message => !message.isRead && message.sender.toString() !== req.user._id.toString()
-      );
-      unreadCount += unreadMessages.length;
-    });
+    const unreadCount = result.length > 0 ? result[0].totalUnread : 0;
 
     res.status(200).json({
       status: 'success',
@@ -644,7 +669,8 @@ const submitQuiz = async (req, res, next) => {
     }
 
     const userIndex = chat.participants.findIndex(p => p.toString() === userId.toString());
-    const user = await User.findById(userId).select('name');
+    // user is already available in req.user from auth middleware
+    const userName = req.user.name;
 
     if (userIndex === 0) {
       chat.quizScores.user1Score = score;
@@ -672,7 +698,7 @@ const submitQuiz = async (req, res, next) => {
     io.to(`chat:${chatId}`).emit('quiz:score', {
       chatId: chatId,
       score: score,
-      userName: user.name,
+      userName: userName,
       userId: userId.toString()
     });
 
@@ -680,8 +706,12 @@ const submitQuiz = async (req, res, next) => {
     if (chat.quizAnswers.user1 && chat.quizAnswers.user2 && !chat.quizAnswers.exchangedAt) {
       chat.quizAnswers.exchangedAt = new Date();
       await chat.save();
-      const user1 = await User.findById(chat.participants[0]).select('name');
-      const user2 = await User.findById(chat.participants[1]).select('name');
+      
+      const [user1, user2] = await Promise.all([
+        User.findById(chat.participants[0]).select('name'),
+        User.findById(chat.participants[1]).select('name')
+      ]);
+
       io.to(`chat:${chatId}`).emit('quiz:selections', {
         chatId,
         user1: { id: chat.participants[0].toString(), name: user1?.name, answers: chat.quizAnswers.user1, score: chat.quizScores.user1Score },

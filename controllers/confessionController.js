@@ -33,15 +33,16 @@ const getConfessions = async (req, res, next) => {
       }
     }
 
-    const confessions = await Confession.find(query)
-      .populate('author', 'name profileImage verified')
-      .populate('comments.author', 'name profileImage verified')
-      .populate('comments.replies.author', 'name profileImage verified')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(enforcedLimit);
-
-    const total = await Confession.countDocuments(query);
+    const [confessions, total] = await Promise.all([
+      Confession.find(query)
+        .populate('author', 'name profileImage verified')
+        .populate('comments.author', 'name profileImage verified')
+        .populate('comments.replies.author', 'name profileImage verified')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(enforcedLimit),
+      Confession.countDocuments(query)
+    ]);
     if (user) {
       user.confessionReadsToday = (user.confessionReadsToday || 0) + confessions.length;
       await user.save();
@@ -327,20 +328,21 @@ const getMyConfessions = async (req, res, next) => {
     const { page = 1, limit = 20 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const confessions = await Confession.find({
-      author: req.user._id,
-      isActive: true
-    })
-    .populate('comments.author', 'name profileImage verified')
-    .populate('comments.replies.author', 'name profileImage verified')
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(parseInt(limit));
-
-    const total = await Confession.countDocuments({
-      author: req.user._id,
-      isActive: true
-    });
+    const [confessions, total] = await Promise.all([
+      Confession.find({
+        author: req.user._id,
+        isActive: true
+      })
+      .populate('comments.author', 'name profileImage verified')
+      .populate('comments.replies.author', 'name profileImage verified')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit)),
+      Confession.countDocuments({
+        author: req.user._id,
+        isActive: true
+      })
+    ]);
 
     res.status(200).json({
       status: 'success',

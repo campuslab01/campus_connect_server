@@ -107,16 +107,17 @@ const searchUsers = async (req, res, next) => {
     // Execute query
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
-    const users = await User.find(mongoQuery)
-      .select('-password -emailVerificationToken -passwordResetToken')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+    const [users, total] = await Promise.all([
+      User.find(mongoQuery)
+        .select('-password -emailVerificationToken -passwordResetToken')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      User.countDocuments(mongoQuery)
+    ]);
 
     // Normalize image URLs for all users
     const normalizedUsers = users.map(user => normalizeUserImages(user.toObject()));
-
-    const total = await User.countDocuments(mongoQuery);
 
     res.status(200).json({
       status: 'success',
@@ -227,8 +228,7 @@ const likeUser = async (req, res, next) => {
     }
 
     currentUser.swipesToday = (currentUser.swipesToday || 0) + 1;
-    await currentUser.save();
-    await targetUser.save();
+    await Promise.all([currentUser.save(), targetUser.save()]);
 
     // Send Socket.io notification for real-time updates
     const { getIO } = require('../utils/socket');
@@ -243,16 +243,18 @@ const likeUser = async (req, res, next) => {
 
     // Send FCM push notification for like
     if (!isMatch) {
-      try {
-        const { sendLikeNotification } = require('../utils/pushNotification');
-        await sendLikeNotification(targetUserId, {
-          userId: currentUserId.toString(),
-          userName: currentUser.name,
-          userAvatar: currentUser.profileImage
-        });
-      } catch (notificationError) {
-        console.error('Error sending like notification:', notificationError);
-      }
+      setImmediate(async () => {
+        try {
+          const { sendLikeNotification } = require('../utils/pushNotification');
+          await sendLikeNotification(targetUserId, {
+            userId: currentUserId.toString(),
+            userName: currentUser.name,
+            userAvatar: currentUser.profileImage
+          });
+        } catch (notificationError) {
+          console.error('Error sending like notification:', notificationError);
+        }
+      });
     }
 
     // If it's a match, notify both users
@@ -273,27 +275,29 @@ const likeUser = async (req, res, next) => {
       });
 
       // FCM push notifications for matches
-      try {
-        const { sendMatchNotification } = require('../utils/pushNotification');
-        
-        // Notify current user about match
-        await sendMatchNotification(currentUserId.toString(), {
-          userId: targetUserId.toString(),
-          userName: targetUser.name,
-          userAvatar: targetUser.profileImage,
-          matchId: `${currentUserId}-${targetUserId}`
-        });
-        
-        // Notify target user about match
-        await sendMatchNotification(targetUserId, {
-          userId: currentUserId.toString(),
-          userName: currentUser.name,
-          userAvatar: currentUser.profileImage,
-          matchId: `${currentUserId}-${targetUserId}`
-        });
-      } catch (notificationError) {
-        console.error('Error sending match notification:', notificationError);
-      }
+      setImmediate(async () => {
+        try {
+          const { sendMatchNotification } = require('../utils/pushNotification');
+          
+          // Notify current user about match
+          await sendMatchNotification(currentUserId.toString(), {
+            userId: targetUserId.toString(),
+            userName: targetUser.name,
+            userAvatar: targetUser.profileImage,
+            matchId: `${currentUserId}-${targetUserId}`
+          });
+          
+          // Notify target user about match
+          await sendMatchNotification(targetUserId, {
+            userId: currentUserId.toString(),
+            userName: currentUser.name,
+            userAvatar: currentUser.profileImage,
+            matchId: `${currentUserId}-${targetUserId}`
+          });
+        } catch (notificationError) {
+          console.error('Error sending match notification:', notificationError);
+        }
+      });
     }
 
     res.status(200).json({
@@ -319,8 +323,8 @@ const unlikeUser = async (req, res, next) => {
     const targetUserId = req.params.id;
     const currentUserId = req.user._id;
 
-    // Get current user
-    const currentUser = await User.findById(currentUserId);
+    // Get current user from request (already populated by auth middleware)
+    const currentUser = req.user;
     const targetUser = await User.findById(targetUserId);
 
     if (!targetUser) {
@@ -348,8 +352,7 @@ const unlikeUser = async (req, res, next) => {
       id => id.toString() !== currentUserId.toString()
     );
 
-    await currentUser.save();
-    await targetUser.save();
+    await Promise.all([currentUser.save(), targetUser.save()]);
 
     res.status(200).json({
       status: 'success',
@@ -365,10 +368,19 @@ const unlikeUser = async (req, res, next) => {
 // @access  Private
 const getUserLikes = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id)
-      .populate('likes', 'name age profileImage college department verified')
-      .populate('likedBy', 'name age profileImage college department verified')
-      .populate('matches', 'name age profileImage college department verified');
+    const { countOnly } = req.query;
+    
+    let query = User.findById(req.user._id);
+    
+    // Only populate if full data is requested (not just counts)
+    if (countOnly !== 'true') {
+      query = query
+        .populate('likes', 'name age profileImage college department verified')
+        .populate('likedBy', 'name age profileImage college department verified')
+        .populate('matches', 'name age profileImage college department verified');
+    }
+
+    const user = await query;
 
     res.status(200).json({
       status: 'success',
@@ -389,7 +401,8 @@ const getUserLikes = async (req, res, next) => {
 const getSuggestedUsers = async (req, res, next) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const currentUser = await User.findById(req.user._id);
+    // currentUser is already available in req.user
+    const currentUser = req.user;
 
     if (!currentUser) {
       return res.status(404).json({
@@ -470,7 +483,7 @@ const blockUser = async (req, res, next) => {
       });
     }
 
-    const currentUser = await User.findById(currentUserId);
+    const currentUser = req.user;
     const targetUser = await User.findById(targetUserId);
 
     if (!targetUser) {
@@ -553,7 +566,7 @@ const reportUser = async (req, res, next) => {
 // @access  Private
 const registerSwipe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = req.user;
     if (!user) {
       return res.status(404).json({ status: 'error', message: 'User not found' });
     }
