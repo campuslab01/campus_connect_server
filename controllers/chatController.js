@@ -1,5 +1,6 @@
 const Chat = require('../models/Chat');
 const User = require('../models/User');
+const mongoose = require('mongoose');
 const { validationResult } = require('express-validator');
 
 // @desc    Get user's chats
@@ -59,11 +60,15 @@ const getOrCreateChat = async (req, res, next) => {
 
     // Check if target user exists and find existing chat in parallel
     const [targetUser, existingChat] = await Promise.all([
-      User.findById(userId),
-      Chat.findOne({
-        participants: { $all: [currentUserId, userId] },
-        isActive: true
-      })
+      User.findById(userId).select('name profileImage verified isVerified'), // Select only needed fields
+      Chat.findOne(
+        {
+          participants: { $all: [currentUserId, userId] },
+          isActive: true
+        },
+        { messages: { $slice: -50 } } // Only fetch last 50 messages to prevent crash
+      )
+      .populate('participants', 'name profileImage verified')
     ]);
 
     if (!targetUser) {
@@ -154,63 +159,86 @@ const getChatMessages = async (req, res, next) => {
   try {
     const { chatId } = req.params;
     const { page = 1, limit = 50 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const limitNum = parseInt(limit);
 
-    const chat = await Chat.findById(chatId)
-      .populate('participants', 'name profileImage');
+    // 1. Check if user is participant (lightweight check)
+    const chatExists = await Chat.exists({
+      _id: chatId,
+      participants: req.user._id
+    });
 
-    if (!chat) {
+    if (!chatExists) {
       return res.status(404).json({
         status: 'error',
-        message: 'Chat not found'
+        message: 'Chat not found or access denied'
       });
     }
 
-    // Check if user is participant
-    if (!chat.participants.some(p => p._id.toString() === req.user._id.toString())) {
-      return res.status(403).json({
-        status: 'error',
-        message: 'Access denied'
-      });
-    }
-
-    // Get messages with pagination
-    const messages = chat.messages
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(skip, skip + parseInt(limit))
-      .reverse();
-
-    // Populate sender info and confession data
-    await chat.populate({
-      path: 'messages.sender',
-      select: 'name profileImage'
-    });
+    // 2. Get total message count efficiently
+    const countResult = await Chat.aggregate([
+      { $match: { _id: new mongoose.Types.ObjectId(chatId) } },
+      { $project: { count: { $size: '$messages' } } }
+    ]);
     
-    // Populate confession data for messages with confessionId
-    await chat.populate({
-      path: 'messages.confessionId',
-      select: 'content author isAnonymous likes comments createdAt',
-      populate: {
-        path: 'author',
-        select: 'name profileImage'
-      }
-    });
+    const totalMessages = countResult[0]?.count || 0;
+
+    // 3. Calculate slice indices for pagination (Newest first)
+    let sliceStart = totalMessages - (parseInt(page) * limitNum);
+    let sliceLimit = limitNum;
+
+    if (sliceStart < 0) {
+       sliceLimit = sliceLimit + sliceStart;
+       sliceStart = 0;
+    }
+
+    let chat;
+    if (sliceLimit > 0) {
+      chat = await Chat.findById(chatId)
+        .select({ 
+          participants: 1, 
+          lastMessage: 1,
+          lastMessageAt: 1,
+          messages: { $slice: [sliceStart, sliceLimit] } 
+        })
+        .populate('participants', 'name profileImage')
+        .populate({
+          path: 'messages.sender',
+          select: 'name profileImage'
+        })
+        .populate({
+          path: 'messages.confessionId',
+          select: 'content author isAnonymous likes comments createdAt',
+          populate: {
+            path: 'author',
+            select: 'name profileImage'
+          }
+        });
+    } else {
+      chat = { messages: [], participants: [] }; // Fallback
+      // Fetch participants if needed, but usually empty messages is enough
+      // Actually we need participants for the response structure
+      chat = await Chat.findById(chatId).select('participants lastMessage lastMessageAt').populate('participants', 'name profileImage');
+      chat.messages = [];
+    }
+
+    // 4. Reverse to match UI expectation (Newest first)
+    const messages = chat.messages ? chat.messages.reverse() : [];
 
     res.status(200).json({
       status: 'success',
       data: {
         messages,
         chat: {
-          _id: chat._id,
+          _id: chatId,
           participants: chat.participants,
           lastMessage: chat.lastMessage,
           lastMessageAt: chat.lastMessageAt
         },
         pagination: {
           currentPage: parseInt(page),
-          totalPages: Math.ceil(chat.messages.length / parseInt(limit)),
-          totalMessages: chat.messages.length,
-          hasNext: skip + messages.length < chat.messages.length,
+          totalPages: Math.ceil(totalMessages / limitNum),
+          totalMessages,
+          hasNext: (parseInt(page) * limitNum) < totalMessages,
           hasPrev: parseInt(page) > 1
         }
       }

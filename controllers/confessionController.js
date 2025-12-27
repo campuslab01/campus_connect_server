@@ -15,11 +15,19 @@ const getConfessions = async (req, res, next) => {
       query.category = category;
     }
 
-    const user = req.user ? await require('../models/User').findById(req.user._id) : null;
+    // Optimize: Use req.user directly if available (auth middleware already fetches it)
+    // Only re-fetch if strictly necessary, but auth middleware selects confessionReadsToday
+    const user = req.user; 
+    
     let enforcedLimit = parseInt(limit);
     let locked = false;
+    
+    // Performance: Check limits without heavy DB ops
     if (user) {
       const { resetIfNeeded, confessionLimitFor } = require('../utils/membership');
+      // Note: resetIfNeeded modifies user state. In a high-perf scenario, 
+      // we might want to defer saving this until after the response or batch it.
+      // For now, we'll keep the logic but ensure we don't re-fetch the user above.
       resetIfNeeded(user);
       const max = confessionLimitFor(user);
       if (Number.isFinite(max)) {
@@ -35,17 +43,29 @@ const getConfessions = async (req, res, next) => {
 
     const [confessions, total] = await Promise.all([
       Confession.find(query)
+        .select('-reportedBy') // Exclude internal fields
         .populate('author', 'name profileImage verified')
-        .populate('comments.author', 'name profileImage verified')
-        .populate('comments.replies.author', 'name profileImage verified')
+        // Limit comments to top 5 to prevent massive payloads
+        // For full comments, client should use a separate endpoint
+        .populate({
+          path: 'comments',
+          options: { limit: 5 },
+          populate: { path: 'author', select: 'name profileImage verified' }
+        }) 
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(enforcedLimit),
+        .limit(enforcedLimit)
+        .lean(),
       Confession.countDocuments(query)
     ]);
-    if (user) {
-      user.confessionReadsToday = (user.confessionReadsToday || 0) + confessions.length;
-      await user.save();
+
+    // Optimize: Update user stats asynchronously to avoid blocking response
+    if (user && confessions.length > 0) {
+      // Fire and forget update (or await if strict consistency needed, but separate from fetch)
+      User.updateOne(
+        { _id: user._id },
+        { $inc: { confessionReadsToday: confessions.length } }
+      ).exec().catch(err => console.error('Failed to update read count:', err));
     }
 
     res.status(200).json({

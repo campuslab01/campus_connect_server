@@ -31,14 +31,14 @@ const createRateLimit = (windowMs, max, message, skipSuccessfulRequests = false)
 // General API rate limiting
 const generalLimiter = createRateLimit(
   15 * 60 * 1000, // 15 minutes
-  100, // 100 requests per window
+  300, // 300 requests per window (increased from 100 for active users)
   'Too many requests from this IP, please try again later.'
 );
 
 // Strict rate limiting for authentication endpoints
 const authLimiter = createRateLimit(
   15 * 60 * 1000, // 15 minutes
-  5, // 5 attempts per window
+  10, // 10 attempts per window (increased from 5 to reduce false positives)
   'Too many authentication attempts, please try again later.',
   true // Skip successful requests
 );
@@ -67,7 +67,7 @@ const searchLimiter = createRateLimit(
 // Speed limiter for additional protection
 const speedLimiter = slowDown({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  delayAfter: 50, // Allow 50 requests per windowMs without delay
+  delayAfter: 100, // Allow 100 requests per windowMs without delay
   delayMs: () => 500, // Add 500ms delay per request after delayAfter (new v2 syntax)
   maxDelayMs: 20000, // Maximum delay of 20 seconds
   skip: (req) => process.env.NODE_ENV === 'development'

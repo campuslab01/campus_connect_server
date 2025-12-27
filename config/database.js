@@ -7,8 +7,9 @@ const connectDB = async () => {
     const conn = await mongoose.connect(mongoURI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
+      serverSelectionTimeoutMS: 30000, // Keep trying to send operations for 30 seconds (increased for cold starts)
       socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+      maxPoolSize: 10, // Limit connection pool for Render free tier
     });
     
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);

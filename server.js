@@ -20,6 +20,14 @@ console.log('SMTP_HOST:', process.env.SMTP_HOST || 'NOT SET');
 console.log('SMTP_USER:', process.env.SMTP_USER ? 'SET' : 'NOT SET');
 console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'SET' : 'NOT SET');
 
+// Critical Environment Check
+const requiredEnv = ['MONGODB_URI', 'JWT_SECRET'];
+const missingEnv = requiredEnv.filter(key => !process.env[key]);
+if (missingEnv.length > 0) {
+  console.error('❌ FATAL ERROR: Missing required environment variables:', missingEnv.join(', '));
+  process.exit(1);
+}
+
 const HIVE_ENABLED = Boolean(process.env.HIVE_BASE_URL && (process.env.HIVE_API_KEY || process.env.HIVE_SECRET_KEY));
 if (!HIVE_ENABLED) {
   console.error('Hive verification disabled: HIVE_BASE_URL:', process.env.HIVE_BASE_URL ? 'SET' : 'MISSING', 'HIVE_API_KEY:', process.env.HIVE_API_KEY ? 'SET' : 'MISSING');
@@ -28,6 +36,12 @@ if (!HIVE_ENABLED) {
 // Initialize email service
 const { initializeEmailService } = require('./utils/emailService');
 initializeEmailService();
+
+// Ensure Database Indexes
+const ensureIndexes = require('./utils/dbOptimizer');
+mongoose.connection.once('connected', () => {
+  ensureIndexes();
+});
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -137,14 +151,14 @@ const corsOptions = {
 // Apply CORS middleware
 app.use(cors(corsOptions));
 
-// Speed limiting (skip OPTIONS requests)
-app.use((req, res, next) => {
+// Speed limiting (skip OPTIONS requests) - Applied only to API routes
+app.use('/api', (req, res, next) => {
   if (req.method === 'OPTIONS') return next();
   return speedLimiter(req, res, next);
 });
 
-// General rate limiting (skip OPTIONS requests)
-app.use((req, res, next) => {
+// General rate limiting (skip OPTIONS requests) - Applied only to API routes
+app.use('/api', (req, res, next) => {
   if (req.method === 'OPTIONS') return next();
   return generalLimiter(req, res, next);
 });
@@ -294,6 +308,9 @@ const startServer = async () => {
     // Initialize Socket.io
     initializeSocket(httpServer);
     console.log(`🔌 Socket.io initialized`);
+
+    // Set server timeout to 120 seconds to handle slow operations/cold starts
+    httpServer.setTimeout(120000);
     
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);

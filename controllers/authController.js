@@ -128,11 +128,13 @@ const login = async (req, res, next) => {
 
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
+      console.log(`Login failed: User not found for email ${email}`);
       return res.status(401).json({ status: 'error', message: 'Invalid email or password' });
     }
 
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
+      console.log(`Login failed: Invalid password for email ${email}`);
       return res.status(401).json({ status: 'error', message: 'Invalid email or password' });
     }
 

@@ -17,8 +17,10 @@ const authenticateToken = async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Get user from database
-    const user = await User.findById(decoded.userId).select('-password');
+    // Get user from database - Select only necessary fields for performance
+    // Exclude heavy arrays like likes, likedBy, matches, photos unless needed
+    const user = await User.findById(decoded.userId)
+      .select('_id name email role isVerified isActive emailVerified confessionReadsToday profileImage membershipLevel premiumExpiresAt');
     
     if (!user) {
       return res.status(401).json({
