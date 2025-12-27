@@ -23,6 +23,8 @@ const ensureIndexes = async () => {
     await User.collection.createIndex({ email: 1 }, { unique: true });
     // Index for search functionality
     await User.collection.createIndex({ name: 'text', college: 'text', department: 'text' });
+    // Index to accelerate suggestions query (filter by isActive, sort by createdAt)
+    await User.collection.createIndex({ isActive: 1, createdAt: -1 });
     
     console.log('✅ Indexes Verified');
   } catch (error) {

@@ -1,38 +1,51 @@
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
-  try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/campus-connection';
-    
+  const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/campus-connection';
+  mongoose.set('strictQuery', true);
+  let attempts = 0;
+  const maxAttempts = 3;
+  const connectOnce = async () => {
     const conn = await mongoose.connect(mongoURI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 30000, // Keep trying to send operations for 30 seconds (increased for cold starts)
-      socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-      maxPoolSize: 10, // Limit connection pool for Render free tier
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000,
+      socketTimeoutMS: 20000,
+      heartbeatFrequencyMS: 8000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 60000,
+      retryReads: true,
+      retryWrites: true,
+      keepAlive: true,
     });
-    
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-    
-    // Handle connection events
     mongoose.connection.on('error', (err) => {
       console.error('❌ MongoDB connection error:', err);
     });
-    
     mongoose.connection.on('disconnected', () => {
       console.log('⚠️ MongoDB disconnected');
     });
-    
-    // Graceful shutdown
     process.on('SIGINT', async () => {
       await mongoose.connection.close();
       console.log('🔌 MongoDB connection closed through app termination');
       process.exit(0);
     });
-    
-  } catch (error) {
-    console.error('❌ MongoDB connection error:', error.message);
-    process.exit(1);
+  };
+  while (attempts < maxAttempts) {
+    try {
+      await connectOnce();
+      return;
+    } catch (error) {
+      attempts += 1;
+      console.error(`❌ MongoDB connection attempt ${attempts} failed: ${error.message}`);
+      if (attempts >= maxAttempts) {
+        process.exit(1);
+      }
+      const waitMs = 1000 * Math.pow(2, attempts);
+      await new Promise(res => setTimeout(res, waitMs));
+    }
   }
 };
 

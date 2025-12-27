@@ -437,16 +437,18 @@ const getSuggestedUsers = async (req, res, next) => {
     //   mongoQuery.college = currentUser.college;
     // }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const limitNum = Math.min(parseInt(limit), 50);
+    const skip = (parseInt(page) - 1) * limitNum;
     
     const users = await User.find(mongoQuery)
-      .select('-password -emailVerificationToken -passwordResetToken')
+      .select('_id name age gender college department year bio interests photos profileImage emailVerified isVerified verified lookingFor createdAt isActive')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(limitNum)
+      .lean();
 
     // Normalize image URLs for all users
-    const normalizedUsers = users.map(user => normalizeUserImages(user.toObject()));
+    const normalizedUsers = users.map(user => normalizeUserImages(user));
 
     const total = await User.countDocuments(mongoQuery);
 
@@ -456,7 +458,7 @@ const getSuggestedUsers = async (req, res, next) => {
         users: normalizedUsers,
         pagination: {
           currentPage: parseInt(page),
-          totalPages: Math.ceil(total / parseInt(limit)),
+          totalPages: Math.ceil(total / limitNum),
           totalUsers: total,
           hasNext: skip + normalizedUsers.length < total,
           hasPrev: parseInt(page) > 1
