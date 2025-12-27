@@ -18,7 +18,6 @@ const connectDB = async () => {
       maxIdleTimeMS: 60000,
       retryReads: true,
       retryWrites: true,
-      keepAlive: true,
     });
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
     mongoose.connection.on('error', (err) => {
