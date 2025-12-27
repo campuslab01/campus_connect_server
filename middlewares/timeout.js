@@ -15,6 +15,9 @@ module.exports = function requestTimeout(ms = 10000) {
       finished = true;
       clearTimeout(timer);
     });
-    next();
+    // Defer next to avoid calling it after we've already sent a timeout response
+    setImmediate(() => {
+      if (!finished) next();
+    });
   };
 }

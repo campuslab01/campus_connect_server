@@ -163,7 +163,7 @@ const getUserProfile = async (req, res, next) => {
     const publicProfile = user.getPublicProfile();
     const normalizedUser = normalizeUserImages(publicProfile);
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       data: {
         user: normalizedUser
@@ -300,7 +300,7 @@ const likeUser = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: isMatch ? 'It\'s a match!' : 'User liked successfully',
       data: {
@@ -354,7 +354,7 @@ const unlikeUser = async (req, res, next) => {
 
     await Promise.all([currentUser.save(), targetUser.save()]);
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'User unliked successfully'
     });
@@ -382,7 +382,7 @@ const getUserLikes = async (req, res, next) => {
 
     const user = await query;
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       data: {
         likes: user.likes,
@@ -476,7 +476,7 @@ const getSuggestedUsers = async (req, res, next) => {
 
     const duration = Date.now() - start;
     logPerformance('suggestions', duration, { userId: req.user._id.toString(), page: parseInt(page), limit: limitNum });
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       data: {
         users: normalizedUsers,
@@ -529,7 +529,7 @@ const blockUser = async (req, res, next) => {
       await currentUser.save();
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'User blocked successfully'
     });
@@ -578,7 +578,7 @@ const reportUser = async (req, res, next) => {
     targetUser.reports.push(report);
     await targetUser.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'User reported successfully'
     });

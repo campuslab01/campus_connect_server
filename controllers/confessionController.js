@@ -73,7 +73,7 @@ const getConfessions = async (req, res, next) => {
 
     const duration = Date.now() - start;
     logPerformance('confessions', duration, { page: parseInt(page), limit: parseInt(limit), userId: req.user?._id?.toString() });
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       data: {
         confessions,
@@ -121,7 +121,7 @@ const getConfession = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       data: {
         confession
@@ -162,7 +162,7 @@ const createConfession = async (req, res, next) => {
 
     await confession.populate('author', 'name profileImage verified');
 
-    res.status(201).json({
+    return res.status(201).json({
       status: 'success',
       message: 'Confession created successfully',
       data: {
@@ -204,7 +204,7 @@ const likeConfession = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'Confession liked successfully',
       data: {
@@ -239,7 +239,7 @@ const unlikeConfession = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'Confession unliked successfully',
       data: {
@@ -299,7 +299,7 @@ const addComment = async (req, res, next) => {
     // Get the last comment (the one we just added) with populated author
     const populatedComment = confession.comments[confession.comments.length - 1];
 
-    res.status(201).json({
+    return res.status(201).json({
       status: 'success',
       message: 'Comment added successfully',
       data: {
@@ -336,7 +336,7 @@ const reportConfession = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'Confession reported successfully'
     });
@@ -369,7 +369,7 @@ const getMyConfessions = async (req, res, next) => {
       })
     ]);
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       data: {
         confessions,
@@ -412,7 +412,7 @@ const deleteConfession = async (req, res, next) => {
     confession.isActive = false;
     await confession.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'Confession deleted successfully'
     });
@@ -458,7 +458,7 @@ const likeComment = async (req, res, next) => {
 
     const comment = confession.comments[index];
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: isLiked ? 'Comment liked successfully' : 'Comment unliked successfully',
       data: {
@@ -528,7 +528,7 @@ const addReply = async (req, res, next) => {
     // Get the last reply (the one we just added)
     const populatedReply = confession.comments[index].replies[confession.comments[index].replies.length - 1];
 
-    res.status(201).json({
+    return res.status(201).json({
       status: 'success',
       message: 'Reply added successfully',
       data: {
@@ -575,7 +575,7 @@ const likeReply = async (req, res, next) => {
 
     const reply = confession.comments[cIndex].replies[rIndex];
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: isLiked ? 'Reply liked successfully' : 'Reply unliked successfully',
       data: {

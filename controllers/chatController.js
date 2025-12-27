@@ -32,7 +32,7 @@ const getUserChats = async (req, res, next) => {
 
     const duration = Date.now() - start;
     logPerformance('chat_list', duration, { userId: req.user._id.toString(), page: parseInt(page), limit: parseInt(limit) });
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       data: {
         chats,
@@ -148,7 +148,7 @@ const getOrCreateChat = async (req, res, next) => {
       select: 'name profileImage'
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       data: {
         chat
@@ -251,7 +251,7 @@ const getChatMessages = async (req, res, next) => {
       }
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       data: {
         messages,
@@ -447,12 +447,12 @@ const sendMessage = async (req, res, next) => {
     }
 
     // Shape response to keep API unchanged as much as possible
-    res.status(201).json({
+    return res.status(201).json({
       status: 'success',
       message: 'Message sent successfully',
       data: {
         message: {
-          _id: message._id,
+          _id: newMessage._id,
           sender: { _id: req.user._id, name: req.user.name },
           content: message.text,
           type: message.type || 'text',
@@ -495,7 +495,7 @@ const markAsRead = async (req, res, next) => {
     // Mark messages as read
     await chat.markAsRead(req.user._id);
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'Messages marked as read'
     });
@@ -532,7 +532,7 @@ const deleteChat = async (req, res, next) => {
     chat.isActive = false;
     await chat.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'Chat deleted successfully'
     });
@@ -582,7 +582,7 @@ const getUnreadCount = async (req, res, next) => {
 
     const unreadCount = result.length > 0 ? result[0].totalUnread : 0;
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       data: {
         unreadCount
@@ -623,7 +623,7 @@ const getQuizConsent = async (req, res, next) => {
     const userConsent = userIndex === 0 ? chat.quizConsent.user1Consent : chat.quizConsent.user2Consent;
     const otherUserConsent = userIndex === 0 ? chat.quizConsent.user2Consent : chat.quizConsent.user1Consent;
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       data: {
         userConsent: userConsent === null ? undefined : userConsent,
@@ -697,7 +697,7 @@ const setQuizConsent = async (req, res, next) => {
       io.to(`chat:${chatId}`).emit('quiz:start', { chatId });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'Quiz consent updated',
       data: {
@@ -794,7 +794,7 @@ const submitQuiz = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'Quiz submitted successfully',
       data: {
@@ -861,7 +861,7 @@ const acceptChatRequest = async (req, res, next) => {
       acceptedByName: req.user.name
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'Chat request accepted',
       data: {
@@ -919,7 +919,7 @@ const rejectChatRequest = async (req, res, next) => {
       rejectedByName: req.user.name
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 'success',
       message: 'Chat request rejected',
       data: {

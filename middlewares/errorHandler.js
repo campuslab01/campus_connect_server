@@ -1,6 +1,9 @@
 const { logError } = require('../utils/logger');
 
 const errorHandler = (err, req, res, next) => {
+  if (res.headersSent) {
+    return;
+  }
   let error = { ...err };
   error.message = err.message;
 
