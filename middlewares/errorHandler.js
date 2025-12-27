@@ -13,6 +13,16 @@ const errorHandler = (err, req, res, next) => {
     userId: req.user ? req.user._id : null
   });
 
+  // Database timeout handling
+  const isDbTimeout = (
+    err?.name === 'MongoNetworkTimeoutError' ||
+    err?.code === 50 || // ExceededTimeLimit
+    /exceeded time limit/i.test(err?.message || '')
+  );
+  if (isDbTimeout) {
+    error = { message: 'Database operation timed out', statusCode: 503, reason: 'DB_TIMEOUT' };
+  }
+
   // Mongoose bad ObjectId
   if (err.name === 'CastError') {
     const message = 'Resource not found';
@@ -54,11 +64,19 @@ const errorHandler = (err, req, res, next) => {
     error = { message, statusCode: 400 };
   }
 
-  res.status(error.statusCode || 500).json({
+  const statusCode = error.statusCode || 500;
+  const payload = {
+    success: false,
     status: 'error',
-    message: error.message || 'Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+    message: error.message || 'Server Error'
+  };
+  if (error.reason) {
+    payload.reason = error.reason;
+  }
+  if (process.env.NODE_ENV === 'development') {
+    payload.stack = err.stack;
+  }
+  res.status(statusCode).json(payload);
 };
 
 module.exports = errorHandler;

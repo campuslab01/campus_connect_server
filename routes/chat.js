@@ -15,6 +15,7 @@ const {
 } = require('../controllers/chatController');
 const { validateMessage } = require('../middlewares/validation');
 const { requireVerification } = require('../middlewares/auth');
+const requestTimeout = require('../middlewares/timeout');
 
 const router = express.Router();
 router.use(requireVerification);
@@ -22,7 +23,7 @@ router.use(requireVerification);
 // @route   GET /api/chat
 // @desc    Get user's chats
 // @access  Private
-router.get('/', getUserChats);
+router.get('/', requestTimeout(10000), getUserChats);
 
 // @route   GET /api/chat/unread-count
 // @desc    Get unread message count

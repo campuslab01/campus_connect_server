@@ -11,6 +11,7 @@ const {
   registerSwipe
 } = require('../controllers/userController');
 const { validateSearch } = require('../middlewares/validation');
+const requestTimeout = require('../middlewares/timeout');
 
 const router = express.Router();
 const { requireVerification } = require('../middlewares/auth');
@@ -23,7 +24,7 @@ router.get('/search', validateSearch, searchUsers);
 // @route   GET /api/users/suggestions
 // @desc    Get suggested users for discover page
 // @access  Private
-router.get('/suggestions', getSuggestedUsers);
+router.get('/suggestions', requestTimeout(10000), getSuggestedUsers);
 
 // @route   GET /api/users/likes
 // @desc    Get user's likes, liked by, and matches

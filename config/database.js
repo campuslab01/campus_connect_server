@@ -3,18 +3,31 @@ const mongoose = require('mongoose');
 const connectDB = async () => {
   const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/campus-connection';
   mongoose.set('strictQuery', true);
+  // Disable autoIndex in production to reduce index build contention
+  mongoose.set('autoIndex', false);
+  // Global query timeout via plugin
+  const MAX_TIME_MS = 8000;
+  mongoose.plugin((schema) => {
+    schema.pre('find', function() { this.maxTimeMS(MAX_TIME_MS); });
+    schema.pre('findOne', function() { this.maxTimeMS(MAX_TIME_MS); });
+    schema.pre('findOneAndUpdate', function() { this.maxTimeMS(MAX_TIME_MS); });
+    schema.pre('countDocuments', function() { this.maxTimeMS(MAX_TIME_MS); });
+    schema.pre('updateOne', function() { this.maxTimeMS(MAX_TIME_MS); });
+    schema.pre('updateMany', function() { this.maxTimeMS(MAX_TIME_MS); });
+    schema.pre('aggregate', function() { this.option({ maxTimeMS: MAX_TIME_MS }); });
+  });
   let attempts = 0;
   const maxAttempts = 3;
   const connectOnce = async () => {
     const conn = await mongoose.connect(mongoURI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000,
-      socketTimeoutMS: 20000,
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 8000,
+      socketTimeoutMS: 8000,
       heartbeatFrequencyMS: 8000,
-      maxPoolSize: 10,
-      minPoolSize: 2,
+      maxPoolSize: 20,
+      minPoolSize: 5,
       maxIdleTimeMS: 60000,
       retryReads: true,
       retryWrites: true,

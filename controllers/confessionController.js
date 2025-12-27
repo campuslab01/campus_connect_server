@@ -4,8 +4,11 @@ const { validationResult } = require('express-validator');
 // @desc    Get confessions
 // @route   GET /api/confessions
 // @access  Private
+const { logPerformance } = require('../utils/logger');
+
 const getConfessions = async (req, res, next) => {
   try {
+    const start = Date.now();
     const { page = 1, limit = 20, category = 'all' } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -68,6 +71,8 @@ const getConfessions = async (req, res, next) => {
       ).exec().catch(err => console.error('Failed to update read count:', err));
     }
 
+    const duration = Date.now() - start;
+    logPerformance('confessions', duration, { page: parseInt(page), limit: parseInt(limit), userId: req.user?._id?.toString() });
     res.status(200).json({
       status: 'success',
       data: {

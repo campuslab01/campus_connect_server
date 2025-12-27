@@ -14,13 +14,14 @@ const {
   deleteConfession
 } = require('../controllers/confessionController');
 const { validateConfession, validateComment } = require('../middlewares/validation');
+const requestTimeout = require('../middlewares/timeout');
 
 const router = express.Router();
 
 // @route   GET /api/confessions
 // @desc    Get all confessions
 // @access  Private
-router.get('/', getConfessions);
+router.get('/', requestTimeout(10000), getConfessions);
 
 // @route   GET /api/confessions/my
 // @desc    Get user's confessions

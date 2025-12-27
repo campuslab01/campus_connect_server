@@ -3,13 +3,14 @@ const Message = require('../models/Message');
 const User = require('../models/User');
 const mongoose = require('mongoose');
 const { validationResult } = require('express-validator');
-const { logger } = require('../utils/logger');
+const { logger, logPerformance } = require('../utils/logger');
 
 // @desc    Get user's chats
 // @route   GET /api/chat
 // @access  Private
 const getUserChats = async (req, res, next) => {
   try {
+    const start = Date.now();
     const { page = 1, limit = 20 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -21,13 +22,16 @@ const getUserChats = async (req, res, next) => {
     .populate('participants', 'name profileImage verified')
     .sort({ lastMessageAt: -1 })
     .skip(skip)
-    .limit(parseInt(limit));
+    .limit(parseInt(limit))
+    .lean();
 
     const total = await Chat.countDocuments({
       participants: req.user._id,
       isActive: true
     });
 
+    const duration = Date.now() - start;
+    logPerformance('chat_list', duration, { userId: req.user._id.toString(), page: parseInt(page), limit: parseInt(limit) });
     res.status(200).json({
       status: 'success',
       data: {

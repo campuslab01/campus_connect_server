@@ -398,8 +398,11 @@ const getUserLikes = async (req, res, next) => {
 // @desc    Get suggested users (for discover page)
 // @route   GET /api/users/suggestions
 // @access  Private
+const { logPerformance } = require('../utils/logger');
+
 const getSuggestedUsers = async (req, res, next) => {
   try {
+    const start = Date.now();
     const { page = 1, limit = 10 } = req.query;
     // currentUser is already available in req.user
     const currentUser = req.user;
@@ -437,21 +440,42 @@ const getSuggestedUsers = async (req, res, next) => {
     //   mongoQuery.college = currentUser.college;
     // }
 
-    const limitNum = Math.min(parseInt(limit), 50);
+    const limitNum = Math.min(parseInt(limit), 20);
     const skip = (parseInt(page) - 1) * limitNum;
     
-    const users = await User.find(mongoQuery)
+    let users;
+    try {
+      users = await User.find(mongoQuery)
       .select('_id name age gender college department year bio interests photos profileImage emailVerified isVerified verified lookingFor createdAt isActive')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
       .lean();
+    } catch (dbErr) {
+      // DB failure fallback with partial response
+      return res.status(200).json({
+        status: 'success',
+        data: {
+          users: [],
+          pagination: {
+            currentPage: parseInt(page),
+            totalPages: 0,
+            totalUsers: 0,
+            hasNext: false,
+            hasPrev: parseInt(page) > 1
+          },
+          partial: true
+        }
+      });
+    }
 
     // Normalize image URLs for all users
     const normalizedUsers = users.map(user => normalizeUserImages(user));
 
     const total = await User.countDocuments(mongoQuery);
 
+    const duration = Date.now() - start;
+    logPerformance('suggestions', duration, { userId: req.user._id.toString(), page: parseInt(page), limit: limitNum });
     res.status(200).json({
       status: 'success',
       data: {
