@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Chat = require('../models/Chat');
 const Confession = require('../models/Confession');
+const Message = require('../models/Message');
 
 const ensureIndexes = async () => {
   try {
@@ -12,6 +13,10 @@ const ensureIndexes = async () => {
     await Chat.collection.createIndex({ participants: 1, isActive: 1 });
     // Index for sorting chats
     await Chat.collection.createIndex({ lastMessageAt: -1 });
+    
+    // Message Indexes - For scalable chat messages
+    await Message.collection.createIndex({ chatId: 1, createdAt: -1 });
+    await Message.collection.createIndex({ senderId: 1 });
     
     // Confession Indexes
     // Index for feed sorting

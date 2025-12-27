@@ -1,7 +1,9 @@
 const Chat = require('../models/Chat');
+const Message = require('../models/Message');
 const User = require('../models/User');
 const mongoose = require('mongoose');
 const { validationResult } = require('express-validator');
+const { logger } = require('../utils/logger');
 
 // @desc    Get user's chats
 // @route   GET /api/chat
@@ -15,6 +17,7 @@ const getUserChats = async (req, res, next) => {
       participants: req.user._id,
       isActive: true
     })
+    .select('participants lastMessage lastMessageAt isActive')
     .populate('participants', 'name profileImage verified')
     .sort({ lastMessageAt: -1 })
     .skip(skip)
@@ -158,15 +161,13 @@ const getOrCreateChat = async (req, res, next) => {
 const getChatMessages = async (req, res, next) => {
   try {
     const { chatId } = req.params;
-    const { page = 1, limit = 50 } = req.query;
+    const { page = 1, limit = 50, cursor } = req.query;
     const limitNum = parseInt(limit);
 
-    // 1. Check if user is participant (lightweight check)
     const chatExists = await Chat.exists({
       _id: chatId,
       participants: req.user._id
     });
-
     if (!chatExists) {
       return res.status(404).json({
         status: 'error',
@@ -174,55 +175,77 @@ const getChatMessages = async (req, res, next) => {
       });
     }
 
-    // 2. Get total message count efficiently
-    const countResult = await Chat.aggregate([
-      { $match: { _id: new mongoose.Types.ObjectId(chatId) } },
-      { $project: { count: { $size: '$messages' } } }
-    ]);
-    
-    const totalMessages = countResult[0]?.count || 0;
-
-    // 3. Calculate slice indices for pagination (Newest first)
-    let sliceStart = totalMessages - (parseInt(page) * limitNum);
-    let sliceLimit = limitNum;
-
-    if (sliceStart < 0) {
-       sliceLimit = sliceLimit + sliceStart;
-       sliceStart = 0;
+    const totalMessages = await Message.countDocuments({ chatId });
+    const query = { chatId };
+    if (cursor) {
+      const c = new Date(cursor);
+      if (!isNaN(c.getTime())) {
+        query.createdAt = { $lt: c };
+      }
     }
 
-    let chat;
-    if (sliceLimit > 0) {
-      chat = await Chat.findById(chatId)
-        .select({ 
-          participants: 1, 
-          lastMessage: 1,
-          lastMessageAt: 1,
-          messages: { $slice: [sliceStart, sliceLimit] } 
-        })
-        .populate('participants', 'name profileImage')
-        .populate({
-          path: 'messages.sender',
-          select: 'name profileImage'
-        })
-        .populate({
-          path: 'messages.confessionId',
-          select: 'content author isAnonymous likes comments createdAt',
-          populate: {
-            path: 'author',
-            select: 'name profileImage'
-          }
-        });
+    let docs = await Message.find(query)
+      .sort({ createdAt: -1 })
+      .skip(cursor ? 0 : (parseInt(page) - 1) * limitNum)
+      .limit(limitNum)
+      .populate('senderId', 'name profileImage')
+      .populate({
+        path: 'confessionId',
+        select: 'content author isAnonymous likes comments createdAt',
+        populate: { path: 'author', select: 'name profileImage' }
+      });
+
+    let messages = [];
+    let chatInfo = await Chat.findById(chatId).select('participants lastMessage lastMessageAt').populate('participants', 'name profileImage');
+
+    if (docs.length > 0) {
+      messages = docs.map(m => ({
+        _id: m._id,
+        content: m.text,
+        type: m.type || 'text',
+        imageUrl: m.imageUrl || '',
+        confessionId: m.confessionId?._id || m.confessionId || null,
+        sender: m.senderId && m.senderId._id ? { _id: m.senderId._id, name: m.senderId.name, profileImage: m.senderId.profileImage } : m.senderId,
+        createdAt: m.createdAt,
+        timestamp: m.createdAt
+      }));
     } else {
-      chat = { messages: [], participants: [] }; // Fallback
-      // Fetch participants if needed, but usually empty messages is enough
-      // Actually we need participants for the response structure
-      chat = await Chat.findById(chatId).select('participants lastMessage lastMessageAt').populate('participants', 'name profileImage');
-      chat.messages = [];
+      logger.warn(`Dual-read fallback: Using embedded Chat.messages for chat ${chatId}`, { chatId });
+      const countResult = await Chat.aggregate([
+        { $match: { _id: new mongoose.Types.ObjectId(chatId) } },
+        { $project: { count: { $size: '$messages' } } }
+      ]);
+      const legacyTotal = countResult[0]?.count || 0;
+      let sliceStart = legacyTotal - (parseInt(page) * limitNum);
+      let sliceLimit = limitNum;
+      if (sliceStart < 0) {
+        sliceLimit = sliceLimit + sliceStart;
+        sliceStart = 0;
+      }
+      if (sliceLimit > 0) {
+        const chatWithMessages = await Chat.findById(chatId)
+          .select({
+            participants: 1,
+            lastMessage: 1,
+            lastMessageAt: 1,
+            messages: { $slice: [sliceStart, sliceLimit] }
+          })
+          .populate('participants', 'name profileImage')
+          .populate({
+            path: 'messages.sender',
+            select: 'name profileImage'
+          })
+          .populate({
+            path: 'messages.confessionId',
+            select: 'content author isAnonymous likes comments createdAt',
+            populate: { path: 'author', select: 'name profileImage' }
+          });
+        messages = (chatWithMessages.messages || []).reverse();
+        chatInfo = chatWithMessages;
+      } else {
+        messages = [];
+      }
     }
-
-    // 4. Reverse to match UI expectation (Newest first)
-    const messages = chat.messages ? chat.messages.reverse() : [];
 
     res.status(200).json({
       status: 'success',
@@ -230,16 +253,16 @@ const getChatMessages = async (req, res, next) => {
         messages,
         chat: {
           _id: chatId,
-          participants: chat.participants,
-          lastMessage: chat.lastMessage,
-          lastMessageAt: chat.lastMessageAt
+          participants: chatInfo.participants,
+          lastMessage: chatInfo.lastMessage,
+          lastMessageAt: chatInfo.lastMessageAt
         },
         pagination: {
           currentPage: parseInt(page),
           totalPages: Math.ceil(totalMessages / limitNum),
           totalMessages,
-          hasNext: (parseInt(page) * limitNum) < totalMessages,
-          hasPrev: parseInt(page) > 1
+          hasNext: cursor ? messages.length === limitNum : (parseInt(page) * limitNum) < totalMessages,
+          hasPrev: cursor ? Boolean(cursor) : parseInt(page) > 1
         }
       }
     });
@@ -302,22 +325,31 @@ const sendMessage = async (req, res, next) => {
       });
     }
 
-    // Add message
-    const message = await chat.addMessage(req.user._id, content, type, imageUrl, confessionId);
-
-    // Repopulate chat to get sender info for messages
-    // Can't populate nested docs directly, so populate at chat level
-    await chat.populate({
-      path: 'messages.sender',
-      select: 'name profileImage'
+    // Insert message into dedicated Message collection
+    const message = await Message.create({
+      chatId: chat._id,
+      senderId: req.user._id,
+      text: content,
+      type,
+      imageUrl,
+      confessionId
     });
 
-    // Get the last message (the one we just added) with populated sender
-    const populatedMessage = chat.messages[chat.messages.length - 1];
+    // Update chat lastMessage and lastMessageAt without pushing to messages array
+    let lastPreview = content;
+    if (type === 'confession') {
+      lastPreview = 'Shared a confession';
+    } else if (type === 'image') {
+      lastPreview = 'Sent an image';
+    }
+    chat.lastMessage = lastPreview;
+    chat.lastMessageAt = message.createdAt;
+    await chat.save();
 
     // Check if quiz consent should be triggered (at 15-20 messages)
     // Only trigger if quiz hasn't been asked yet and messages are between 15-20
-    const totalMessages = chat.messages.length;
+    // Compute total messages from Message collection for progressive migration
+    const totalMessages = await Message.countDocuments({ chatId: chat._id });
     const shouldTriggerQuizConsent = totalMessages >= 15 && totalMessages <= 20 && 
                                      !chat.quizConsent.askedAt && 
                                      chat.quizConsent.user1Consent === null && 
@@ -332,10 +364,10 @@ const sendMessage = async (req, res, next) => {
       try {
         const { getIO } = require('../utils/socket');
         const io = getIO();
-        io.to(`chat:${chatId}`).emit('quiz:consent-request', {
-          chatId: chatId,
-          messageCount: totalMessages
-        });
+      io.to(`chat:${chatId}`).emit('quiz:consent-request', {
+        chatId: chatId,
+        messageCount: totalMessages
+      });
       } catch (socketError) {
         console.error('Error emitting quiz consent request:', socketError);
       }
@@ -346,17 +378,17 @@ const sendMessage = async (req, res, next) => {
       const { getIO } = require('../utils/socket');
       const io = getIO();
       io.to(`chat:${chatId}`).emit('message:new', {
-        id: populatedMessage._id,
+        id: message._id,
         chatId: chatId,
-        content: populatedMessage.content,
-        type: populatedMessage.type || 'text',
-        confessionId: populatedMessage.confessionId || null,
+        content: message.text,
+        type: message.type || 'text',
+        confessionId: message.confessionId || null,
         sender: {
           id: req.user._id,
           name: req.user.name
         },
-        createdAt: populatedMessage.createdAt,
-        timestamp: populatedMessage.createdAt
+        createdAt: message.createdAt,
+        timestamp: message.createdAt
       });
     } catch (socketError) {
       // Log error but don't fail the message send
@@ -396,11 +428,11 @@ const sendMessage = async (req, res, next) => {
           if (!isRecipientOnline) {
             await sendMessageNotification(recipientId.toString(), {
               senderName: sender?.name || 'Someone',
-              content: content.substring(0, 100), // Truncate long messages
+              content: content.substring(0, 100),
               chatId: chatId,
               senderId: req.user._id.toString(),
               senderAvatar: sender?.profileImage,
-              messageId: populatedMessage._id.toString()
+              messageId: message._id.toString()
             });
           }
         } catch (notificationError) {
@@ -410,11 +442,21 @@ const sendMessage = async (req, res, next) => {
       });
     }
 
+    // Shape response to keep API unchanged as much as possible
     res.status(201).json({
       status: 'success',
       message: 'Message sent successfully',
       data: {
-        message: populatedMessage
+        message: {
+          _id: message._id,
+          sender: { _id: req.user._id, name: req.user.name },
+          content: message.text,
+          type: message.type || 'text',
+          imageUrl: message.imageUrl || '',
+          confessionId: message.confessionId || null,
+          createdAt: message.createdAt,
+          timestamp: message.createdAt
+        }
       }
     });
   } catch (error) {
