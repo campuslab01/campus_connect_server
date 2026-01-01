@@ -6,19 +6,29 @@ const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
 
-// Load environment variables
-// Updated for production deployment - October 28, 2025
-dotenv.config();
+// Load environment variables based on NODE_ENV
+const nodeEnv = process.env.NODE_ENV || 'development';
+const envFile = nodeEnv === 'production' ? '.env' : '.env.development';
+const envPath = path.resolve(__dirname, envFile);
 
-// Debug environment variables
-console.log('🔍 Environment Variables Debug:');
-console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
-console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
-console.log('CLIENT_URL:', process.env.CLIENT_URL || 'NOT SET');
-console.log('NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
-console.log('SMTP_HOST:', process.env.SMTP_HOST || 'NOT SET');
-console.log('SMTP_USER:', process.env.SMTP_USER ? 'SET' : 'NOT SET');
-console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'SET' : 'NOT SET');
+console.log(`📂 Loading environment config from: ${envFile}`);
+dotenv.config({ path: envPath });
+
+// Safety check for NODE_ENV consistency
+if (process.env.NODE_ENV && process.env.NODE_ENV !== nodeEnv) {
+  console.warn(`⚠️ Warning: NODE_ENV in file (${process.env.NODE_ENV}) differs from system (${nodeEnv}). Using system value.`);
+}
+
+if (process.env.NODE_ENV !== 'production') {
+  console.log('🔍 Environment Variables Debug:');
+  console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
+  console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
+  console.log('CLIENT_URL:', process.env.CLIENT_URL || 'NOT SET');
+  console.log('NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
+  console.log('SMTP_HOST:', process.env.SMTP_HOST || 'NOT SET');
+  console.log('SMTP_USER:', process.env.SMTP_USER ? 'SET' : 'NOT SET');
+  console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'SET' : 'NOT SET');
+}
 
 // Critical Environment Check
 const requiredEnv = ['MONGODB_URI', 'JWT_SECRET'];
@@ -26,6 +36,16 @@ const missingEnv = requiredEnv.filter(key => !process.env[key]);
 if (missingEnv.length > 0) {
   console.error('❌ FATAL ERROR: Missing required environment variables:', missingEnv.join(', '));
   process.exit(1);
+}
+if (process.env.NODE_ENV !== 'development') {
+  if (!process.env.CLIENT_URL) {
+    console.error('❌ FATAL ERROR: CLIENT_URL is required in non-development environments');
+    process.exit(1);
+  }
+  if (process.env.MONGODB_URI && process.env.MONGODB_URI.includes('localhost')) {
+    console.error('❌ FATAL ERROR: MONGODB_URI must not point to localhost in non-development environments');
+    process.exit(1);
+  }
 }
 
 const HIVE_ENABLED = Boolean(process.env.HIVE_BASE_URL && (process.env.HIVE_API_KEY || process.env.HIVE_SECRET_KEY));

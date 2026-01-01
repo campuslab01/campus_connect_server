@@ -197,7 +197,8 @@ const getChatMessages = async (req, res, next) => {
         path: 'confessionId',
         select: 'content author isAnonymous likes comments createdAt',
         populate: { path: 'author', select: 'name profileImage' }
-      });
+      })
+      .lean();
 
     let messages = [];
     let chatInfo = await Chat.findById(chatId).select('participants lastMessage lastMessageAt').populate('participants', 'name profileImage');
@@ -446,13 +447,12 @@ const sendMessage = async (req, res, next) => {
       });
     }
 
-    // Shape response to keep API unchanged as much as possible
     return res.status(201).json({
       status: 'success',
       message: 'Message sent successfully',
       data: {
         message: {
-          _id: newMessage._id,
+          _id: message._id,
           sender: { _id: req.user._id, name: req.user.name },
           content: message.text,
           type: message.type || 'text',

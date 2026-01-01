@@ -362,7 +362,8 @@ const getMyConfessions = async (req, res, next) => {
       .populate('comments.replies.author', 'name profileImage verified')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit)),
+      .limit(parseInt(limit))
+      .lean(),
       Confession.countDocuments({
         author: req.user._id,
         isActive: true

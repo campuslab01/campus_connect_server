@@ -112,14 +112,15 @@ const searchUsers = async (req, res, next) => {
         .select('-password -emailVerificationToken -passwordResetToken')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(parseInt(limit))
+        .lean(),
       User.countDocuments(mongoQuery)
     ]);
 
     // Normalize image URLs for all users
-    const normalizedUsers = users.map(user => normalizeUserImages(user.toObject()));
-
-    res.status(200).json({
+    const normalizedUsers = users.map(user => normalizeUserImages(user));
+    
+    return res.status(200).json({
       status: 'success',
       data: {
         users: normalizedUsers,
