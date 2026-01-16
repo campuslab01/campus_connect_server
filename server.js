@@ -104,7 +104,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:", process.env.SERVER_PUBLIC_URL || process.env.CLIENT_URL || "https://campus-connect-server-yqbh.onrender.com"],
+      imgSrc: ["'self'", "data:", "https:", process.env.SERVER_PUBLIC_URL || process.env.CLIENT_URL || process.env.RAILWAY_URL],
       connectSrc: ["'self'"],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
@@ -132,6 +132,7 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   process.env.CLIENT_URL, // Main client URL
+  process.env.RAILWAY_URL ? `${process.env.RAILWAY_URL}` : null,
   process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
   process.env.GITHUB_PAGES_URL ? `https://${process.env.GITHUB_PAGES_URL}` : null,
 ].filter(Boolean); // Remove null/undefined values
@@ -318,7 +319,7 @@ const startServer = async () => {
   try {
     await connectDB();
     
-    const httpServer = app.listen(PORT, () => {
+    const httpServer = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🌐 API URL: http://localhost:${PORT}/api`);
