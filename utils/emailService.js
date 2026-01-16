@@ -1,47 +1,39 @@
-const formData = require('form-data');
-const Mailgun = require('mailgun.js');
+const { Resend } = require('@resend/node');
 
-let mg;
-let mailgunDomain;
+let resend;
+let defaultFrom;
 
-/**
- * Initialize Mailgun client
- */
 const initializeEmailService = () => {
-  if (mg) return;
+  if (resend) return;
 
-  mailgunDomain = process.env.MAILGUN_DOMAIN;
-  const mailgunApiKey = process.env.MAILGUN_API_KEY;
+  const apiKey = process.env.RESEND_API_KEY;
+  defaultFrom = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM;
 
   if (process.env.NODE_ENV !== 'production') {
-    console.log('📧 Email Service Configuration (Mailgun):');
-    console.log('   Domain:', mailgunDomain || 'NOT SET');
-    console.log('   API Key:', mailgunApiKey ? '***SET***' : 'NOT SET');
+    console.log('📧 Email Service Configuration (Resend):');
+    console.log('   API Key:', apiKey ? '***SET***' : 'NOT SET');
+    console.log('   From:', defaultFrom || 'NOT SET');
   }
 
-  if (!mailgunApiKey || !mailgunDomain) {
+  if (!apiKey) {
     if (process.env.NODE_ENV === 'production') {
-      console.error('❌ Mailgun credentials not configured - emails will not be sent');
+      console.error('❌ Resend API key not configured - emails will not be sent');
     } else {
-      console.warn('⚠️ Mailgun not configured. Email sending will be logged instead of sent.');
+      console.warn('⚠️ Resend not configured. Email sending will be logged instead of sent.');
     }
     return;
   }
 
   try {
-    const mailgun = new Mailgun(formData);
-    mg = mailgun.client({
-      username: 'api',
-      key: mailgunApiKey,
-    });
+    resend = new Resend(apiKey);
     if (process.env.NODE_ENV !== 'production') {
-      console.log('✅ Mailgun client initialized successfully.');
+      console.log('✅ Resend client initialized successfully.');
     }
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {
-      console.error('❌ Error initializing Mailgun client:', error.message);
+      console.error('❌ Error initializing Resend client:', error.message);
     }
-    mg = null;
+    resend = null;
   }
 };
 
@@ -79,43 +71,44 @@ class EmailBuilder {
   }
 
   /**
-   * Send the email via Mailgun
+   * Send the email via Resend
    */
   async send() {
-    // If Mailgun is not configured, log instead of sending
-    if (!mg) {
+    if (!resend) {
       if (process.env.NODE_ENV !== 'production') {
-        console.log('📧 [Email would be sent via Mailgun]', this.mailOptions);
+        console.log('📧 [Email would be sent via Resend]', this.mailOptions);
       }
-      return { id: '<test-message-id@mailgun>', message: 'Queued. Thank you.' };
+      return { id: '<test-message-id@resend>', message: 'Queued. Thank you.' };
     }
 
-    // Set default from address if not already set
     if (!this.mailOptions.from) {
-      this.mailOptions.from = `Campus Connection <noreply@${mailgunDomain}>`;
+      this.mailOptions.from = defaultFrom || 'Campus Connection <noreply@example.com>';
     }
 
     try {
       if (process.env.NODE_ENV !== 'production') {
-        console.log('🚀 Sending email via Mailgun...');
+        console.log('🚀 Sending email via Resend...');
       }
-      const msg = await mg.messages.create(mailgunDomain, this.mailOptions);
+      const msg = await resend.emails.send({
+        from: this.mailOptions.from,
+        to: this.mailOptions.to,
+        subject: this.mailOptions.subject,
+        html: this.mailOptions.html,
+        text: this.mailOptions.text
+      });
       if (process.env.NODE_ENV !== 'production') {
-        console.log('✅ Email sent successfully via Mailgun');
-        console.log('   Message ID:', msg.id);
+        console.log('✅ Email sent successfully via Resend');
+        console.log('   Message ID:', msg.id || msg.data?.id);
         console.log('   To:', this.mailOptions.to);
         console.log('   Subject:', this.mailOptions.subject);
       }
       return msg;
     } catch (error) {
       if (process.env.NODE_ENV !== 'production') {
-        console.error('❌ Error sending email via Mailgun:');
+        console.error('❌ Error sending email via Resend:');
         console.error('   Error message:', error.message);
-        if (error.details) {
-          console.error('   Error details:', error.details);
-        }
-        if (error.status) {
-          console.error('   Status code:', error.status);
+        if (error.response) {
+          console.error('   Error response:', error.response);
         }
         console.error('   To:', this.mailOptions.to);
         console.error('   Subject:', this.mailOptions.subject);

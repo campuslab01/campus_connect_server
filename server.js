@@ -53,8 +53,7 @@ if (!HIVE_ENABLED) {
   console.error('Hive verification disabled: HIVE_BASE_URL:', process.env.HIVE_BASE_URL ? 'SET' : 'MISSING', 'HIVE_API_KEY:', process.env.HIVE_API_KEY ? 'SET' : 'MISSING');
 }
 
-// Initialize email service
-const { initializeEmailService } = require('./utils/emailService');
+const { initializeEmailService, Email } = require('./utils/emailService');
 initializeEmailService();
 
 // Ensure Database Indexes
@@ -275,6 +274,22 @@ app.use('/uploads', (req, res) => {
 app.get('/health', healthCheck);
 app.get('/api/health', healthCheck);
 
+app.get('/api/test-email', async (req, res, next) => {
+  try {
+    const to = process.env.TEST_EMAIL || req.query.to;
+    if (!to) {
+      return res.status(400).json({ status: 'error', message: 'TEST_EMAIL not set' });
+    }
+    const result = await Email.create()
+      .to(to)
+      .subject('Hello World Test')
+      .text('Hello World from Campus Connection via Resend')
+      .send();
+    return res.status(200).json({ status: 'success', data: { id: result.id || result?.data?.id } });
+  } catch (error) {
+    next(error);
+  }
+});
 // API Routes with specific rate limiting
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', authenticateToken, searchLimiter, userRoutes);
