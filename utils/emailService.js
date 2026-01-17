@@ -4,7 +4,7 @@ let resend;
 let defaultFrom;
 
 const initializeEmailService = () => {
-  if (resend) return;
+  if (resend) return resend;
 
   const apiKey = process.env.RESEND_API_KEY;
   defaultFrom = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM;
@@ -35,6 +35,7 @@ const initializeEmailService = () => {
     }
     resend = null;
   }
+  return resend;
 };
 
 /**

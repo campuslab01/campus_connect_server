@@ -61,7 +61,10 @@ const registerInit = async (req, res, next) => {
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const [existingUser, existingRecord] = await Promise.all([
+      User.findOne({ email }),
+      SignupOtp.findOne({ email, isUsed: false })
+    ]);
     if (existingUser) {
       return res.status(400).json({
         status: 'error',
@@ -69,7 +72,6 @@ const registerInit = async (req, res, next) => {
       });
     }
 
-    const existingRecord = await SignupOtp.findOne({ email, isUsed: false });
     const now = new Date();
     const cooldownMs = 30 * 1000;
     if (existingRecord && existingRecord.lastSentAt && now - existingRecord.lastSentAt < cooldownMs && existingRecord.expiresAt > now) {
@@ -97,7 +99,9 @@ const registerInit = async (req, res, next) => {
           .subject('Your Signup Verification Code')
           .html(emailTemplates.signupOtpEmail(name || 'User', otp, 10))
           .send();
-      } catch (e) {}
+      } catch (e) {
+        console.error('Signup OTP email failed:', e.message);
+      }
     });
 
     res.status(200).json({ status: 'success', message: 'OTP sent to email. Complete verification to finish signup.' });
@@ -187,6 +191,18 @@ const verifySignupOtp = async (req, res, next) => {
     const token = generateToken(user._id);
     const userResponse = normalizeUserImages(user.getPublicProfile());
 
+    setImmediate(async () => {
+      try {
+        await Email.create()
+          .to(user.email)
+          .subject('Welcome to Campus Connection')
+          .html(`<html><body><div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;"><h2>Welcome, ${user.name || 'User'}!</h2><p>Your account has been created successfully.</p><p>Enjoy connecting with your campus community.</p><p>&copy; ${new Date().getFullYear()} Campus Connection</p></div></body></html>`)
+          .send();
+      } catch (e) {
+        console.error('Welcome email failed:', e.message);
+      }
+    });
+
     res.status(200).json({ status: 'success', message: 'Signup completed', data: { user: userResponse, token } });
   } catch (error) {
     next(error);
@@ -199,11 +215,13 @@ const resendSignupOtp = async (req, res, next) => {
     if (!email) {
       return res.status(400).json({ status: 'error', message: 'Email is required' });
     }
-    const existingUser = await User.findOne({ email });
+    const [existingUser, existing] = await Promise.all([
+      User.findOne({ email }),
+      SignupOtp.findOne({ email, isUsed: false })
+    ]);
     if (existingUser) {
       return res.status(400).json({ status: 'error', message: 'User already exists with this email' });
     }
-    const existing = await SignupOtp.findOne({ email, isUsed: false });
     const now = new Date();
     const cooldownMs = 30 * 1000;
     if (existing && existing.lastSentAt && now - existing.lastSentAt < cooldownMs) {
@@ -225,7 +243,9 @@ const resendSignupOtp = async (req, res, next) => {
       try {
         const userName = (existing && existing.signupData && existing.signupData.name) || 'User';
         await Email.create().to(email).subject('Your Signup Verification Code').html(emailTemplates.signupOtpEmail(userName, otp, 10)).send();
-      } catch (e) {}
+      } catch (e) {
+        console.error('Resend signup OTP email failed:', e.message);
+      }
     });
 
     res.status(200).json({ status: 'success', message: 'OTP resent to your email.' });
