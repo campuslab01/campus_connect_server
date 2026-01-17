@@ -1,4 +1,4 @@
-const { Resend } = require('resend');
+const { Resend } = require('@resend/node');
 
 let resend;
 let defaultFrom;

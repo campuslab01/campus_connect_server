@@ -24,6 +24,9 @@ const generateToken = (userId) => {
 // @access  Public
 const registerInit = async (req, res, next) => {
   try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Registration Data Received:', req.body);
+    }
     // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
