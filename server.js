@@ -1,3 +1,4 @@
+process.env.AWS_SDK_JS_SUPPRESS_MAINTENANCE_MODE_MESSAGE = '1';
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -12,7 +13,7 @@ const envFile = nodeEnv === 'production' ? '.env' : '.env.development';
 const envPath = path.resolve(__dirname, envFile);
 
 console.log(`📂 Loading environment config from: ${envFile}`);
-dotenv.config({ path: envPath });
+dotenv.config({ path: envPath, quiet: true });
 
 // Safety check for NODE_ENV consistency
 if (process.env.NODE_ENV && process.env.NODE_ENV !== nodeEnv) {
@@ -49,8 +50,10 @@ if (process.env.NODE_ENV !== 'development') {
 }
 
 const HIVE_ENABLED = Boolean(process.env.HIVE_BASE_URL && (process.env.HIVE_API_KEY || process.env.HIVE_SECRET_KEY));
-if (!HIVE_ENABLED) {
-  console.error('Hive verification disabled: HIVE_BASE_URL:', process.env.HIVE_BASE_URL ? 'SET' : 'MISSING', 'HIVE_API_KEY:', process.env.HIVE_API_KEY ? 'SET' : 'MISSING');
+if (process.env.NODE_ENV !== 'production') {
+  if (!HIVE_ENABLED) {
+    console.error('Hive verification disabled: HIVE_BASE_URL:', process.env.HIVE_BASE_URL ? 'SET' : 'MISSING', 'HIVE_API_KEY:', process.env.HIVE_API_KEY ? 'SET' : 'MISSING');
+  }
 }
 
 const { initializeEmailService, Email } = require('./utils/emailService');
@@ -333,17 +336,18 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
   try {
     await connectDB();
-    
+    if (process.env.NODE_ENV === 'production') {
+      console.log('✅ Database Ready.');
+    }
     const httpServer = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🌐 API URL: http://localhost:${PORT}/api`);
-      console.log(`💚 Health check: http://localhost:${PORT}/api/health`);
+      console.log(`🚀 Server live on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode.`);
     });
 
     // Initialize Socket.io
     initializeSocket(httpServer);
-    console.log(`🔌 Socket.io initialized`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`🔌 Socket.io initialized`);
+    }
 
     // Set server timeout to 120 seconds to handle slow operations/cold starts
     httpServer.setTimeout(120000);

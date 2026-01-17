@@ -16,9 +16,7 @@ const initializeEmailService = () => {
   }
 
   if (!apiKey) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error('❌ Resend API key not configured - emails will not be sent');
-    } else {
+    if (process.env.NODE_ENV !== 'production') {
       console.warn('⚠️ Resend not configured. Email sending will be logged instead of sent.');
     }
     return;
@@ -26,7 +24,9 @@ const initializeEmailService = () => {
 
   try {
     resend = new Resend(apiKey);
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV === 'production') {
+      console.log('✅ Email Ready.');
+    } else {
       console.log('✅ Resend client initialized successfully.');
     }
   } catch (error) {

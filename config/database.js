@@ -4,8 +4,10 @@ const connectDB = async () => {
   const mongoURI = process.env.MONGODB_URI;
   const nodeEnv = process.env.NODE_ENV || 'development';
 
-  console.log(`🔌 Initializing Database Connection...`);
-  console.log(`   Environment: ${nodeEnv}`);
+  if (nodeEnv !== 'production') {
+    console.log(`🔌 Initializing Database Connection...`);
+    console.log(`   Environment: ${nodeEnv}`);
+  }
   
   if (!mongoURI) {
     throw new Error('❌ FATAL: MONGODB_URI is undefined.');
@@ -42,13 +44,15 @@ const connectDB = async () => {
       minPoolSize: 5,
     });
     
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-    console.log(`   📂 Active Database: ${conn.connection.db.databaseName}`);
+    if (nodeEnv !== 'production') {
+      console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+      console.log(`   📂 Active Database: ${conn.connection.db.databaseName}`);
+    }
 
     // Verify Environment Separation
     const dbName = conn.connection.db.databaseName;
-    if (nodeEnv === 'production' && dbName !== 'campus-connection') {
-        console.warn(`⚠️ WARNING: Production is connected to '${dbName}' instead of 'campus-connection'. Verify if this is intentional.`);
+    if (nodeEnv !== 'production' && dbName !== 'campus-connection') {
+        console.warn(`⚠️ WARNING: Connected to '${dbName}' (expected 'campus-connection' in production).`);
     }
     if (nodeEnv === 'development' && dbName === 'campus-connection') {
         console.error(`❌ CRITICAL SAFETY WARNING: Development environment is connected to PRODUCTION database 'campus-connection'!`);
