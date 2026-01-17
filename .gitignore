@@ -9,6 +9,8 @@ yarn-error.log*
 .env.local
 .env.production
 .env.test
+.env.development
+.env.*
 
 # Firebase Service Account (NEVER commit this!)
 config/serviceAccountKey.json
@@ -48,8 +50,7 @@ node_modules/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
-.env
+
 
 # IDE files
 .vscode/
